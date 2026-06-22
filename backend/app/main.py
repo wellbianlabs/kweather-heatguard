@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -27,15 +28,17 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    task = asyncio.create_task(collector.run())
+    # 서버리스(Vercel)에서는 RUN_COLLECTOR=false → 워커 미기동, /api/live 는 stateless 합성 사용.
+    task = asyncio.create_task(collector.run()) if settings.RUN_COLLECTOR else None
     try:
         yield
     finally:
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
 
 app = FastAPI(title="HeatGuard 실시간 폭염대응", version="0.1.0", lifespan=lifespan)
@@ -70,7 +73,20 @@ def get_thresholds() -> dict:
 
 
 @app.get("/api/live")
-def live() -> dict:
+async def live() -> dict:
+    # 워커가 누적한 실시간 스냅샷이 있으면 그대로, 없으면(서버리스 콜드/무워커)
+    # stateless 합성으로 폴백 — 동일 대시보드가 sts(WS)·Vercel(폴링) 양쪽에서 동작.
+    snap = store.snapshot()
+    if snap["stations"]:
+        return snap
+    if settings.USE_MOCK or not settings.KW_IOT_API_KEY:
+        from . import mock
+        return mock.snapshot_at(datetime.now())
+    # 실계정·무워커: last-all 1회 조회로 현재값만(히스토리 없음)
+    from .kw_iot import fetch_last_all
+    readings = await fetch_last_all()
+    for r in readings:
+        store.ingest(r)
     return store.snapshot()
 
 

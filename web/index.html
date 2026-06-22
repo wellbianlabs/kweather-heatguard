@@ -132,15 +132,36 @@ function renderAlerts(list){
   }).join("");
 }
 
+let pollTimer=null, prevAlertKey="";
+function startPolling(){
+  if(pollTimer) return;
+  dot.classList.add("on"); conn.textContent="실시간(폴링)";
+  const tick=async()=>{
+    try{
+      const snap=await (await fetch("/api/live",{cache:"no-store"})).json();
+      render(snap);
+      const top=(snap.alerts||[])[0];
+      const key=top?`${top.sn}:${top.level}`:"";
+      if(key && key!==prevAlertKey) flashAlert();
+      prevAlertKey=key;
+    }catch(e){ dot.classList.remove("on"); conn.textContent="연결 끊김"; }
+  };
+  tick(); pollTimer=setInterval(tick,3000);
+}
+
 function connect(){
+  // WebSocket(sts 서버) 우선, 실패 시 폴링(Vercel 서버리스)로 자동 전환.
+  let settled=false;
   const proto = location.protocol==="https:"?"wss":"ws";
-  const ws = new WebSocket(`${proto}://${location.host}/ws/live`);
-  ws.onopen=()=>{ dot.classList.add("on"); conn.textContent="실시간 연결됨"; };
+  let ws;
+  try{ ws = new WebSocket(`${proto}://${location.host}/ws/live`); }
+  catch(e){ return startPolling(); }
+  const fallback=setTimeout(()=>{ if(!settled){ try{ws.close();}catch(_){}{} startPolling(); } },2500);
+  ws.onopen=()=>{ settled=true; clearTimeout(fallback); dot.classList.add("on"); conn.textContent="실시간 연결됨"; };
   ws.onmessage=e=>{ const m=JSON.parse(e.data); if(m.type==="snapshot") render(m.data); else if(m.type==="alert") flashAlert(); };
-  ws.onclose=()=>{ dot.classList.remove("on"); conn.textContent="재연결 중…"; setTimeout(connect,2000); };
-  ws.onerror=()=>ws.close();
-  // keepalive
-  setInterval(()=>{ if(ws.readyState===1) ws.send("ping"); },25000);
+  ws.onclose=()=>{ clearTimeout(fallback); if(!settled){ startPolling(); return; } dot.classList.remove("on"); conn.textContent="재연결 중…"; setTimeout(connect,2000); };
+  ws.onerror=()=>{ if(!settled){ clearTimeout(fallback); startPolling(); } try{ws.close();}catch(_){}{} };
+  setInterval(()=>{ if(ws && ws.readyState===1) ws.send("ping"); },25000);
 }
 function flashAlert(){ document.title="🚨 폭염경보! · HeatGuard"; setTimeout(()=>document.title="HeatGuard · 실시간 폭염대응",4000); }
 connect();

@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     # ── 실시간 수집 ──
     POLL_INTERVAL_SEC: int = 30            # last-all 폴링 주기
     USE_MOCK: bool = False                 # true면 합성 데이터(키 없이 PoC 구동)
+    RUN_COLLECTOR: bool = True             # 백그라운드 폴링 워커 기동(서버리스=false)
 
     # ── 경보(MVP: Slack/Webhook 1채널) ──
     SLACK_WEBHOOK_URL: str = ""            # 비면 경보를 콘솔/WS 피드로만 송출

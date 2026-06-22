@@ -1,0 +1,6 @@
+# Vercel 서버리스 배포용(루트) — 데모 데이터는 stateless 합성이라 DB/판다스 불필요.
+fastapi==0.115.6
+pydantic==2.10.5
+pydantic-settings==2.7.1
+python-dotenv==1.0.1
+httpx==0.28.1
