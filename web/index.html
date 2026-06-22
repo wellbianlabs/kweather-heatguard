@@ -167,9 +167,11 @@
   table.exp th{background:var(--gray-0);font-weight:700;color:#334155}
   table.exp td.lvl{font-weight:800;color:#fff}
   .restNote{margin-top:11px;padding:12px 14px;background:#fef3c7;border:1px solid #fde68a;border-radius:var(--r-md);font-size:12.5px;color:#92400e;line-height:1.5}
-  .hourGrid{display:grid;grid-template-columns:repeat(12,1fr);gap:4px;margin-top:6px}
-  .hourCell{text-align:center;font-size:10px;color:var(--muted)}
-  .hourBar{height:34px;border-radius:5px;display:flex;align-items:flex-end;justify-content:center;color:#fff;font-size:9.5px;font-weight:700;padding-bottom:2px}
+  .hourGrid{display:grid;grid-template-columns:repeat(12,1fr);gap:6px;margin-top:8px}
+  .hourCell{text-align:center;font-size:11.5px;color:#475569;margin-top:4px;font-weight:600}
+  .hourBar{height:54px;border-radius:7px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    color:#fff;font-size:19px;font-weight:800;letter-spacing:-.5px;text-shadow:0 1px 2px rgba(0,0,0,.28);line-height:1}
+  .hourBar small{font-size:10px;font-weight:700;opacity:.9;margin-top:2px}
   .guide{list-style:none;padding:0;margin:0}
   .guide li{position:relative;padding:9px 12px 9px 30px;background:var(--gray-0);border-radius:var(--r-md);margin-bottom:7px;font-size:12.5px;line-height:1.5;color:#334155}
   .guide li::before{content:"✓";position:absolute;left:12px;top:9px;color:var(--kw);font-weight:800}
@@ -445,7 +447,7 @@ function renderReportBody(r){
   const expRows=(r.exposure||[]).map(e=>`<tr><td class="lvl" style="background:${e.color}">${e.label}</td>
     <td>${e.threshold}℃ 이상</td><td style="font-weight:700">${e.label_time}</td></tr>`).join("");
   const hours=(r.hours||[]);
-  const hourCells=hours.map(h=>`<div><div class="hourBar" style="background:${h.color}">${h.feels??""}</div><div class="hourCell">${h.hour}시</div></div>`).join("");
+  const hourCells=hours.map(h=>`<div><div class="hourBar" style="background:${h.color}">${h.feels!=null?h.feels:"–"}<small>℃</small></div><div class="hourCell">${h.hour}시</div></div>`).join("");
   const guide=(r.guidance||[]).map(g=>`<li>${g}</li>`).join("");
   const restWarn=(r.legal_rest_count>0)?`<div class="restNote"><b>법정 휴식 의무</b> — 근무시간(09~18시) 중 체감 33℃ 이상 작업 누적 ${r.work_hot_label}.
     산업안전보건규칙상 <b>2시간마다 20분 이상 휴식</b> 기준으로 최소 <b>${r.legal_rest_count}회 · 총 ${r.legal_rest_minutes}분</b>의 휴식을 부여해야 합니다.</div>`:"";
