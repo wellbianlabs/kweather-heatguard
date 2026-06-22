@@ -56,8 +56,9 @@ class Device(Base):
     site_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("heatguard.sites.id", ondelete="SET NULL"))
     serial: Mapped[str] = mapped_column(String, nullable=False)
     name: Mapped[str | None] = mapped_column(String)
-    kind: Mapped[str] = mapped_column(String, default="outdoor", nullable=False)
-    device_type: Mapped[str | None] = mapped_column(String)
+    kind: Mapped[str] = mapped_column(String, default="outdoor", nullable=False)  # indoor | outdoor (실내/실외)
+    model: Mapped[str | None] = mapped_column(String)         # 모델명(5종 이상) — 시리얼/AIR365 기준
+    device_type: Mapped[str | None] = mapped_column(String)   # AIR365 분류(IAQ/OAQ)
     location: Mapped[str | None] = mapped_column(String)
     source: Mapped[str] = mapped_column(String, default="kweather", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

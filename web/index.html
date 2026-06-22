@@ -255,6 +255,9 @@
   .siteHead .sAddr{font-size:12px;color:var(--muted);margin-top:1px}
   .siteHead .sCount{margin-left:auto;font-size:12px;color:var(--muted);font-weight:700;background:var(--paper);border:1px solid var(--line);padding:4px 11px;border-radius:999px}
   .typeBadge{font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:6px;background:#eef2ff;color:#3730a3;border:1px solid #e0e7ff;white-space:nowrap}
+  .kindBadge{font-size:10.5px;font-weight:800;padding:2px 9px;border-radius:6px;white-space:nowrap}
+  .kindBadge.indoor{background:#e7f5fc;color:#0a7fb8}
+  .kindBadge.outdoor{background:#fef3c7;color:#92400e}
   .air365Panel{margin-top:14px;border:1.5px solid var(--sky);border-radius:var(--r-lg);overflow:hidden}
   .air365Head{display:flex;align-items:center;gap:10px;padding:13px 16px;background:#e7f5fc;color:#0a7fb8;font-weight:700;font-size:13.5px}
   .air365Row{display:flex;align-items:center;gap:12px;padding:10px 16px;border-top:1px solid var(--line-soft);font-size:13px}
@@ -724,7 +727,7 @@ function devStatus(d){
 }
 function deviceRow(d, demo){
   const s=devStatus(d);
-  const type=d.device_type?`<span class="typeBadge">${d.device_type}</span>`:`<span class="typeBadge">${d.kind==="indoor"?"실내":"옥외"}</span>`;
+  const type=`<span class="kindBadge ${d.kind==="indoor"?"indoor":"outdoor"}">${d.kind==="indoor"?"실내":"실외"}</span> <span class="typeBadge">${d.model||d.device_type||"미상 모델"}</span>`;
   const move=demo?"":`<select class="siteMini" data-move="${d.device_sn}">${siteOptions(d.site_id)}</select>`;
   const act=`<button class="ctrlBtn" data-ctrl="${d.device_sn}">제어</button>
     <button class="goBtn" data-go="${d.device_sn}">대시보드</button>`+
@@ -740,7 +743,7 @@ function siteSection(title, addr, count, devs, demo, sid){
     <div class="siteHead"><div class="sIco">🏭</div>
       <div><div class="sName">${title}</div>${addr?`<div class="sAddr">${addr}</div>`:""}</div>
       <span class="sCount">기기 ${count}대</span>${del}</div>
-    <table class="devTable"><thead><tr><th>시리얼</th><th>이름</th><th class="center">종류</th><th class="center">현재 체감</th><th class="center">상태</th><th>사업장</th><th class="center">동작</th></tr></thead>
+    <table class="devTable"><thead><tr><th>시리얼</th><th>이름</th><th class="center">종류 · 모델</th><th class="center">현재 체감</th><th class="center">상태</th><th>사업장</th><th class="center">동작</th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
 }
 async function loadSitesDevices(){
@@ -810,7 +813,7 @@ async function openAir365(){
   if(!a.reachable){ wrap.innerHTML=`<div class="air365Panel"><div class="air365Head" style="background:#fef2f2;color:#991b1b">⚠️ AIR365 연결 실패 — ${a.error||"자격증명 확인 필요"}</div></div>`; return; }
   const rows=(a.devices||[]).map(d=>`<div class="air365Row">
     <input type="checkbox" data-imp="${d.serial}" ${d.imported?"disabled checked":""}/>
-    <div style="flex:1"><b>${d.serial}</b> · ${d.name} <span class="typeBadge">${d.device_type||""}</span>
+    <div style="flex:1"><b>${d.serial}</b> · ${d.name} <span class="kindBadge ${d.kind==="indoor"?"indoor":"outdoor"}">${d.kind==="indoor"?"실내":"실외"}</span> <span class="typeBadge">${d.model||d.device_type||""}</span>
       <div style="font-size:11px;color:var(--muted);margin-top:2px">${(d.metrics||[]).map(m=>`<span class="metricChip">${m}</span>`).join("")}</div></div>
     ${d.imported?`<span class="stBadge on">가져옴</span>`:`<span class="stBadge wait">미등록</span>`}</div>`).join("");
   wrap.innerHTML=`<div class="air365Panel">

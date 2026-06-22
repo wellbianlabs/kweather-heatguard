@@ -256,7 +256,8 @@ async def air365_devices(tenant: Tenant = Depends(get_tenant), db: Session = Dep
     except Exception as e:  # noqa: BLE001
         return {"reachable": False, "account": settings.KW_IOT_USER_ID or None, "error": str(e), "devices": []}
     items = [{
-        "serial": r["sn"], "name": r["name"], "kind": r["kind"], "device_type": r.get("device_type"),
+        "serial": r["sn"], "name": r["name"], "kind": r["kind"], "model": r.get("model"),
+        "device_type": r.get("device_type"),
         "metrics": r.get("metrics", []), "feels_like": r["feels_like"], "temperature": r["temperature"],
         "humidity": r["humidity"], "date": r.get("raw_date"), "imported": r["sn"] in owned,
     } for r in readings]
@@ -283,7 +284,7 @@ async def air365_import(payload: dict = Body(...), tenant: Tenant = Depends(get_
         if not r:
             continue
         d = dev_db.add(db, tenant, sn, r.get("name"), r["kind"], None, site_id,
-                       r.get("device_type"), source="air365")
+                       r.get("device_type"), source="air365", model=r.get("model"))
         imported.append(d.serial)
     return {"ok": True, "imported": imported, "count": len(imported)}
 

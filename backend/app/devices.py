@@ -26,7 +26,7 @@ def get(db: Session, tenant: Tenant, serial: str) -> Device | None:
 
 def add(db: Session, tenant: Tenant, serial: str, name: str | None, kind: str,
         location: str | None, site_id: int | None = None, device_type: str | None = None,
-        source: str = "kweather") -> Device:
+        source: str = "kweather", model: str | None = None) -> Device:
     serial = (serial or "").strip()
     if not serial:
         raise ValueError("시리얼 번호가 필요합니다.")
@@ -39,11 +39,13 @@ def add(db: Session, tenant: Tenant, serial: str, name: str | None, kind: str,
             existing.site_id = site_id
         if device_type:
             existing.device_type = device_type
+        if model:
+            existing.model = model
         db.commit()
         return existing
     dev = Device(tenant_id=tenant.id, serial=serial, name=(name or serial),
                  kind=("indoor" if kind == "indoor" else "outdoor"),
-                 location=location, site_id=site_id, device_type=device_type, source=source)
+                 location=location, site_id=site_id, device_type=device_type, model=model, source=source)
     db.add(dev)
     db.commit()
     db.refresh(dev)
@@ -70,5 +72,5 @@ def remove(db: Session, tenant: Tenant, serial: str) -> bool:
 
 def as_dict(d: Device) -> dict:
     return {"device_sn": d.serial, "serial": d.serial, "name": d.name, "location_name": d.name,
-            "kind": d.kind, "device_type": d.device_type, "location": d.location,
+            "kind": d.kind, "model": d.model, "device_type": d.device_type, "location": d.location,
             "site_id": d.site_id, "source": d.source}

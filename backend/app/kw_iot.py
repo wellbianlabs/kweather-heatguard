@@ -10,6 +10,7 @@ STS에서 구현→제거됐던 연동(cd720aa^:services/kw_iot.py)을 실시간
 """
 from __future__ import annotations
 
+import re
 from datetime import datetime
 
 import httpx
@@ -17,6 +18,19 @@ import httpx
 from . import mock
 from .config import settings
 from .feels import kma_feels_like
+
+# 시리얼 접두(숫자 꼬리 제외)로 모델 식별. 알려진 모델은 친화 라벨, 그 외는 접두 코드 표기.
+MODEL_LABELS = {
+    "IST4W": "체감온도계 (IST4W)",
+    "IVTKW": "실내공기질 (IVTKW)",
+    "IVT": "실내공기질 (IVT)",
+    "OST": "실외대기 (OST)",
+}
+
+
+def model_from_serial(serial: str) -> str:
+    code = re.sub(r"\d+$", "", serial or "").rstrip("-_") or (serial or "")
+    return MODEL_LABELS.get(code, code or "미상 모델")
 
 
 def _apparent_temp(t: float | None, rh: float | None) -> float | None:
@@ -83,6 +97,7 @@ async def fetch_real_readings() -> list[dict]:
                        ("초미세먼지", it.get("pm25")), ("VOC", it.get("voc"))) if v is not None]
             out.append({
                 "sn": sn, "name": it.get("stationName") or sn, "kind": kind,
+                "model": model_from_serial(sn),
                 "device_type": dtype, "metrics": metrics, "measured_at": mt, "raw_date": ts,
                 "temperature": temp, "humidity": humi, "feels_like": feels,
                 "co2": it.get("co2"), "pm10": it.get("pm10"), "pm25": it.get("pm25"), "voc": it.get("voc"),
