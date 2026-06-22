@@ -23,6 +23,25 @@
     -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;letter-spacing:-.01em}
   ::-webkit-scrollbar{width:10px;height:10px}
   ::-webkit-scrollbar-thumb{background:#e2e8f0;border-radius:8px;border:3px solid var(--bg)}
+  /* ── 로그인/회원가입 게이트 ── */
+  .authScreen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:20px;z-index:100}
+  .authCard{width:100%;max-width:400px;background:var(--paper);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow-card);padding:34px 30px;text-align:center}
+  .authLogo{height:26px;margin-bottom:16px}
+  .authCard h1{font-size:19px;font-weight:800;margin:0;letter-spacing:-.3px}
+  .authSub{font-size:12.5px;color:var(--muted);margin:7px 0 22px}
+  .authTabs{display:flex;gap:6px;background:var(--gray-0);border-radius:10px;padding:4px;margin-bottom:18px}
+  .authTab{flex:1;height:36px;border:none;background:transparent;border-radius:8px;font-family:var(--font);font-size:13.5px;font-weight:700;color:var(--muted);cursor:pointer}
+  .authTab.active{background:var(--paper);color:var(--kw);box-shadow:var(--shadow-card)}
+  .authForm{display:flex;flex-direction:column;gap:10px;text-align:left}
+  .authForm label{font-size:12px;font-weight:600;color:#334155;margin-bottom:-4px}
+  .authForm input{height:42px;border:1px solid var(--line);border-radius:10px;padding:0 13px;font-family:var(--font);font-size:14px}
+  .authForm input:focus{outline:none;border-color:var(--kw);box-shadow:0 0 0 3px var(--kw-50)}
+  .authForm button.submit{height:44px;margin-top:6px;background:var(--kw);color:#fff;border:none;border-radius:10px;font-family:var(--font);font-size:14.5px;font-weight:700;cursor:pointer}
+  .authForm button.submit:hover{background:#0d4290}
+  .authErr{color:var(--danger);font-size:12.5px;margin-top:12px;min-height:16px;font-weight:600}
+  .authDemo{margin-top:22px;padding-top:18px;border-top:1px solid var(--line-soft);font-size:12.5px;color:var(--muted)}
+  .authDemo .btn{margin-top:9px;width:100%;height:42px;justify-content:center;font-size:14px}
+
   .shell{display:flex;min-height:100vh}
 
   /* ── 사이드바 ── */
@@ -221,7 +240,25 @@
 </style>
 </head>
 <body>
-<div class="shell">
+<div class="authScreen" id="authScreen">
+  <div class="authCard">
+    <img src="/assets/kweather-logo.png" alt="KWEATHER" class="authLogo" />
+    <h1>실시간 폭염대응 솔루션</h1>
+    <p class="authSub">IoT 체감온도 · 실시간 위험감지 · 폭염 안전관리</p>
+    <div class="authTabs">
+      <button class="authTab active" id="tabLogin">로그인</button>
+      <button class="authTab" id="tabSignup">회원가입</button>
+    </div>
+    <div id="authForm"></div>
+    <div class="authErr" id="authErr"></div>
+    <div class="authDemo">
+      먼저 둘러보시겠어요?
+      <button class="btn light" id="demoBtn">데모로 시작하기 →</button>
+    </div>
+  </div>
+</div>
+
+<div class="shell" id="appShell" style="display:none">
   <aside class="navbar">
     <div class="nav-header">
       <img src="/assets/kweather-logo.png" alt="KWEATHER" />
@@ -247,7 +284,8 @@
       <div class="navlink" id="nav-devices"><span class="ico">⚙</span>기기 관리</div>
     </div>
     <div class="nav-footer">
-      <div class="acct"><div class="avatar">HG</div><div class="who">HeatGuard<small>실시간 데모</small></div></div>
+      <div class="acct"><div class="avatar" id="acctAvatar">HG</div><div class="who" id="acctWho">HeatGuard<small>실시간 데모</small></div></div>
+      <button class="btn" id="logoutBtn" style="width:100%;height:34px;margin-top:10px;justify-content:center;font-size:12.5px">로그아웃</button>
     </div>
   </aside>
 
@@ -265,21 +303,74 @@ const state={view:"dash", sn:"", date:null, devices:[], mode:"", live:null};
 const view=document.getElementById("view");
 let tsChart=null, weekChart=null;
 
-const api=(p)=>fetch(p,{cache:"no-store"}).then(r=>r.json());
+const KEY="kw_api_key";
+function authHeaders(extra){ const k=localStorage.getItem(KEY); return Object.assign(k?{"X-API-Key":k}:{}, extra||{}); }
+const api=(p)=>fetch(p,{cache:"no-store",headers:authHeaders()}).then(r=>{ if(!r.ok) throw r; return r.json(); });
 const fmtMin=(m)=>{ if(!m||m<=0)return"0분"; const h=Math.floor(m/60),x=m%60; return h>0?`${h}시간 ${x}분`:`${x}분`; };
 
-/* ── 부팅 ── */
-Promise.all([api("/api/thresholds").catch(()=>({})), api("/api/health").catch(()=>({})), api("/api/devices").catch(()=>({devices:[]})), api("/api/dates").catch(()=>({dates:[]}))])
-.then(([th,h,dv,dt])=>{
+/* ── 인증 게이트 ── */
+let authMode="login";
+function showAuth(){ document.getElementById("appShell").style.display="none"; document.getElementById("authScreen").style.display="flex"; renderAuthForm(); }
+function renderAuthForm(){
+  const f=document.getElementById("authForm");
+  const isLogin=authMode==="login";
+  f.innerHTML=`<div class="authForm">
+    <label>이메일</label><input id="auEmail" type="email" placeholder="name@company.com" autocomplete="username"/>
+    ${isLogin?"":`<label>회사/사업장 이름</label><input id="auName" placeholder="예: 케이웨더 A현장"/>`}
+    <label>비밀번호</label><input id="auPw" type="password" placeholder="${isLogin?'비밀번호':'6자 이상'}" autocomplete="${isLogin?'current-password':'new-password'}"/>
+    <button class="submit" id="auSubmit">${isLogin?"로그인":"회원가입"}</button>
+  </div>`;
+  document.getElementById("auSubmit").onclick=submitAuth;
+  f.querySelectorAll("input").forEach(i=>i.addEventListener("keydown",e=>{ if(e.key==="Enter")submitAuth(); }));
+}
+function setTab(m){ authMode=m; document.getElementById("tabLogin").classList.toggle("active",m==="login");
+  document.getElementById("tabSignup").classList.toggle("active",m==="signup"); document.getElementById("authErr").textContent=""; renderAuthForm(); }
+async function submitAuth(){
+  const err=document.getElementById("authErr"); err.textContent="";
+  const email=document.getElementById("auEmail").value.trim(), pw=document.getElementById("auPw").value;
+  const name=document.getElementById("auName")?.value.trim();
+  if(!email||!pw){ err.textContent="이메일과 비밀번호를 입력하세요."; return; }
+  const path=authMode==="login"?"/api/auth/login":"/api/auth/signup";
+  try{
+    const r=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password:pw,name})});
+    const j=await r.json();
+    if(!r.ok){ err.textContent=j.detail||"실패했습니다."; return; }
+    localStorage.setItem(KEY,j.api_key); state.auth=j; enterApp();
+  }catch(e){ err.textContent="서버 오류가 발생했습니다."; }
+}
+function useDemo(){ localStorage.setItem(KEY,"demo-key"); state.auth={api_key:"demo-key",is_demo:true,name:"데모 사업장"}; enterApp(); }
+function logout(){ localStorage.removeItem(KEY); location.reload(); }
+
+async function boot(){
+  const k=localStorage.getItem(KEY);
+  if(!k){ showAuth(); return; }
+  try{ state.auth=await api("/api/auth/me"); enterApp(); }
+  catch(e){ localStorage.removeItem(KEY); showAuth(); }
+}
+async function enterApp(){
+  document.getElementById("authScreen").style.display="none";
+  document.getElementById("appShell").style.display="flex";
+  renderAccount();
+  const [th,h,dv,dt]=await Promise.all([
+    api("/api/thresholds").catch(()=>({})), api("/api/health").catch(()=>({})),
+    api("/api/devices").catch(()=>({devices:[]})), api("/api/dates").catch(()=>({dates:[]}))]);
   if(th.thresholds) THRESH=th.thresholds;
-  state.mode = h.mode==="mock" ? "실시간 데모" : (h.mode?"케이웨더 IoT":"");
-  state.devices = dv.devices||[];
-  state.dates = dt.dates||[];
-  state.date = (dt.dates&&dt.dates[0])||null;
-  renderLegend();
-  render();
-  connect();
-});
+  state.mode = state.auth?.is_demo ? "실시간 데모" : "케이웨더 IoT";
+  state.devices=dv.devices||[]; state.dates=dt.dates||[]; state.date=(dt.dates&&dt.dates[0])||null;
+  state.sn="";
+  renderLegend(); render(); connect();
+}
+function renderAccount(){
+  const a=state.auth||{}; const nm=a.name||a.email||"사용자";
+  document.getElementById("acctAvatar").textContent=(a.is_demo?"데모":(nm[0]||"U")).slice(0,2);
+  document.getElementById("acctWho").innerHTML=`${nm}<small>${a.is_demo?"읽기 전용 데모":(a.email||"")}</small>`;
+}
+document.getElementById("tabLogin").onclick=()=>setTab("login");
+document.getElementById("tabSignup").onclick=()=>setTab("signup");
+document.getElementById("demoBtn").onclick=useDemo;
+document.getElementById("logoutBtn").onclick=logout;
+renderAuthForm();
+boot();
 
 document.getElementById("nav-dash").onclick=()=>{ state.view="dash"; setNav(); render(); };
 document.getElementById("nav-report").onclick=()=>{ state.view="report"; setNav(); render(); };
@@ -525,17 +616,19 @@ function renderDevices(){
         <th>시리얼 번호</th><th>이름</th><th class="center">구분</th><th class="center">소스</th>
         <th class="center">현재 체감</th><th class="center">상태</th><th class="center">동작</th>
       </tr></thead><tbody id="devRows"><tr><td colspan="7" class="center"><div class="empty">불러오는 중…</div></td></tr></tbody></table>
-      <div class="addForm">
+      ${state.auth&&state.auth.is_demo
+        ? `<div class="infoTip" style="margin-top:14px">※ 데모 계정은 <b>읽기 전용</b>입니다. 기기를 등록·관리하려면 회원가입 후 이용하세요.</div>`
+        : `<div class="addForm">
         <div class="field"><label>시리얼 번호</label><input id="addSerial" placeholder="예: IST4W1800033"/></div>
         <div class="field"><label>이름(사업장)</label><input id="addName" placeholder="예: A현장 옥외작업장"/></div>
         <div class="field"><label>구분</label><select id="addKind"><option value="outdoor">옥외</option><option value="indoor">실내</option></select></div>
         <button class="btn primary" id="addBtn">+ 기기 등록</button>
       </div>
-      <div class="infoTip" style="margin-top:12px">※ 데모 환경에서는 기기 등록이 임시(세션)로 유지됩니다. 영구 등록·시계열 저장은 서버(DB) 이식 단계에서 적용됩니다.
-        시리얼이 케이웨더 계정에 존재하면 해당 기기의 측정값이 API로 자동 연동됩니다.</div>
+      <div class="infoTip" style="margin-top:12px">※ 시리얼이 케이웨더 계정에 존재하면 해당 기기의 측정값이 API로 자동 연동됩니다.
+        영구 등록은 계정에 저장됩니다.</div>`}
     </div>`;
   document.getElementById("probeBtn").onclick=loadDevices;
-  document.getElementById("addBtn").onclick=addDevice;
+  const ab=document.getElementById("addBtn"); if(ab) ab.onclick=addDevice;
   loadDevices();
 }
 async function loadDevices(){
@@ -573,15 +666,15 @@ async function loadDevices(){
 async function addDevice(){
   const serial=document.getElementById("addSerial").value.trim(); if(!serial){ alert("시리얼 번호를 입력하세요."); return; }
   const name=document.getElementById("addName").value.trim(), kind=document.getElementById("addKind").value;
-  const r=await fetch("/api/devices",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({serial,name,kind})});
-  if(!r.ok){ alert("등록 실패"); return; }
+  const r=await fetch("/api/devices",{method:"POST",headers:authHeaders({"Content-Type":"application/json"}),body:JSON.stringify({serial,name,kind})});
+  if(!r.ok){ const j=await r.json().catch(()=>({})); alert(j.detail||"등록 실패"); return; }
   document.getElementById("addSerial").value=""; document.getElementById("addName").value="";
   const dv=await api("/api/devices"); state.devices=dv.devices||state.devices;
   loadDevices();
 }
 async function delDevice(serial){
   if(!confirm(`${serial} 기기를 삭제할까요?`))return;
-  await fetch(`/api/devices/${serial}`,{method:"DELETE"});
+  await fetch(`/api/devices/${serial}`,{method:"DELETE",headers:authHeaders()});
   const dv=await api("/api/devices"); state.devices=dv.devices||state.devices;
   loadDevices();
 }
@@ -619,6 +712,7 @@ function startPolling(){
   tick(); pollTimer=setInterval(tick,3000);
 }
 function connect(){
+  if(!state.auth || !state.auth.is_demo){ return startPolling(); }
   let settled=false; const proto=location.protocol==="https:"?"wss":"ws"; let ws;
   try{ ws=new WebSocket(`${proto}://${location.host}/ws/live`); }catch(e){ return startPolling(); }
   const fb=setTimeout(()=>{ if(!settled){ try{ws.close();}catch(_){}{} startPolling(); } },2500);
