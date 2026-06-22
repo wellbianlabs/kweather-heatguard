@@ -32,8 +32,13 @@ async def fetch_last_all() -> list[dict]:
     return await fetch_real_readings()
 
 
+def _clean(v: str | None) -> str:
+    """env 주입 시 섞일 수 있는 BOM/CRLF/공백 제거(잘못된 키로 인한 401 방지)."""
+    return (v or "").lstrip("﻿").strip()
+
+
 def has_credentials() -> bool:
-    return bool(settings.KW_IOT_API_KEY and settings.KW_IOT_USER_ID)
+    return bool(_clean(settings.KW_IOT_API_KEY) and _clean(settings.KW_IOT_USER_ID))
 
 
 async def fetch_real_readings() -> list[dict]:
@@ -43,12 +48,12 @@ async def fetch_real_readings() -> list[dict]:
     """
     if not has_credentials():
         raise RuntimeError("KW_IOT 자격증명(KW_IOT_API_KEY / KW_IOT_USER_ID) 미설정")
-    url = f"{settings.KW_IOT_BASE_URL}/last-all"
+    url = f"{_clean(settings.KW_IOT_BASE_URL)}/last-all"
     params = {
         "stationType": "ALL",
         "idType": "USER",
-        "id": settings.KW_IOT_USER_ID,
-        "api_key": settings.KW_IOT_API_KEY,
+        "id": _clean(settings.KW_IOT_USER_ID),
+        "api_key": _clean(settings.KW_IOT_API_KEY),
     }
     async with httpx.AsyncClient(timeout=15.0, verify=settings.KW_IOT_VERIFY_SSL) as client:
         r = await client.get(url, params=params)
