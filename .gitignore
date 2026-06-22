@@ -24,3 +24,5 @@ _*.err
 .DS_Store
 .idea/
 .vscode/
+
+.vercel
