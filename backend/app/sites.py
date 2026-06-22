@@ -24,15 +24,20 @@ def get(db: Session, tenant: Tenant, site_id: int) -> Site | None:
     return db.scalar(select(Site).where(Site.id == site_id, Site.tenant_id == tenant.id))
 
 
-def add(db: Session, tenant: Tenant, name: str, address: str | None) -> Site:
+def add(db: Session, tenant: Tenant, name: str, address: str | None, region: str | None = None) -> Site:
     name = (name or "").strip()
     if not name:
         raise ValueError("사업장 이름이 필요합니다.")
-    s = Site(tenant_id=tenant.id, name=name, address=(address or None))
+    s = Site(tenant_id=tenant.id, name=name, address=(address or None), region=(region or None))
     db.add(s)
     db.commit()
     db.refresh(s)
     return s
+
+
+def regions(db: Session, tenant: Tenant) -> list[str]:
+    rows = db.scalars(select(Site.region).where(Site.tenant_id == tenant.id, Site.region.isnot(None)).distinct())
+    return sorted({r for r in rows if r})
 
 
 def remove(db: Session, tenant: Tenant, site_id: int) -> bool:
@@ -45,4 +50,4 @@ def remove(db: Session, tenant: Tenant, site_id: int) -> bool:
 
 
 def as_dict(s: Site, count: int = 0) -> dict:
-    return {"id": s.id, "name": s.name, "address": s.address, "device_count": count}
+    return {"id": s.id, "name": s.name, "region": s.region, "address": s.address, "device_count": count}

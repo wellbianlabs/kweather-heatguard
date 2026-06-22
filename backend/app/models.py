@@ -40,6 +40,7 @@ class Site(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     tenant_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("heatguard.tenants.id", ondelete="CASCADE"), nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
+    region: Mapped[str | None] = mapped_column(String)   # 지역(수도권/영남 등) — 대규모 그룹핑
     address: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

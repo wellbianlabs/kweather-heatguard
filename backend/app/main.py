@@ -221,11 +221,53 @@ def assign_device_site(serial: str, payload: dict = Body(...),
     return {"ok": True}
 
 
+@app.get("/api/devices/page")
+def devices_page(page: int = 1, page_size: int = 50, site_id: int | None = None, region: str | None = None,
+                 kind: str | None = None, model: str | None = None, q: str | None = None,
+                 unassigned: bool = False, tenant: Tenant = Depends(get_tenant),
+                 db: Session = Depends(get_db)) -> dict:
+    """대규모 기기 목록(서버측 필터·페이지네이션). 데모 기기는 현재값 동봉."""
+    res = dev_db.query(db, tenant, page=page, page_size=page_size, site_id=site_id, region=region,
+                       kind=kind, model=model, q=q, unassigned=unassigned)
+    if tenant.is_demo:
+        latest = _demo_latest_by_serial()
+        for d in res["devices"]:
+            d["latest"] = latest.get(d["device_sn"])
+    return res
+
+
+@app.get("/api/devices/summary")
+def devices_summary(tenant: Tenant = Depends(get_tenant), db: Session = Depends(get_db)) -> dict:
+    return dev_db.summary(db, tenant)
+
+
+@app.post("/api/devices/bulk")
+def devices_bulk(payload: dict = Body(...), tenant: Tenant = Depends(get_tenant), db: Session = Depends(get_db)) -> dict:
+    """선택 기기 일괄 작업 — assign(사업장 이동) / delete(삭제)."""
+    block_demo(tenant)
+    action = payload.get("action")
+    serials = payload.get("serials") or []
+    n = 0
+    if action == "assign":
+        sid = payload.get("site_id")
+        for s in serials:
+            if dev_db.assign_site(db, tenant, s, int(sid) if sid else None):
+                n += 1
+    elif action == "delete":
+        for s in serials:
+            if dev_db.remove(db, tenant, s):
+                n += 1
+    else:
+        raise HTTPException(400, "지원하지 않는 작업입니다.")
+    return {"ok": True, "affected": n}
+
+
 # ── 사업장(Site) ──
 @app.get("/api/sites")
 def list_sites(tenant: Tenant = Depends(get_tenant), db: Session = Depends(get_db)) -> dict:
     counts = site_db.device_counts(db, tenant)
-    return {"sites": [site_db.as_dict(s, counts.get(s.id, 0)) for s in site_db.list_for(db, tenant)]}
+    return {"sites": [site_db.as_dict(s, counts.get(s.id, 0)) for s in site_db.list_for(db, tenant)],
+            "regions": site_db.regions(db, tenant)}
 
 
 @app.post("/api/sites")
@@ -234,7 +276,7 @@ def add_site(payload: dict = Body(...), tenant: Tenant = Depends(get_tenant), db
     name = (payload.get("name") or "").strip()
     if not name:
         raise HTTPException(400, "사업장 이름이 필요합니다.")
-    s = site_db.add(db, tenant, name, payload.get("address"))
+    s = site_db.add(db, tenant, name, payload.get("address"), payload.get("region"))
     return {"ok": True, "site": site_db.as_dict(s, 0)}
 
 

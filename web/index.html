@@ -266,6 +266,28 @@
   .metricChip{font-size:10px;color:var(--muted);background:var(--gray-0);border:1px solid var(--line-soft);padding:1px 7px;border-radius:5px;margin-left:4px}
   .ctrlBtn{font-size:12px;color:#334155;border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:5px 11px;cursor:pointer}
   .siteMini{height:30px;font-size:12.5px;padding:0 8px;border:1px solid var(--line);border-radius:8px}
+  /* 대규모 플릿 관리 */
+  .mgmtSummary{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:14px 0}
+  .sumCard{background:var(--gray-0);border:1px solid var(--line-soft);border-radius:var(--r-md);padding:11px 13px;text-align:center}
+  .sumCard .n{font-size:22px;font-weight:800;color:var(--kw);letter-spacing:-.5px}
+  .sumCard .l{font-size:11px;color:var(--muted);font-weight:600;margin-top:3px}
+  .mgmtLayout{display:flex;gap:14px;align-items:flex-start;margin-top:4px}
+  .treePanel{width:236px;flex:0 0 236px;padding:12px;max-height:600px;overflow-y:auto}
+  .treeNode{display:flex;align-items:center;gap:7px;padding:7px 9px;border-radius:8px;cursor:pointer;font-size:13px;margin-bottom:2px}
+  .treeNode:hover{background:var(--gray-0)}
+  .treeNode.active{background:var(--kw-50);color:var(--kw);font-weight:700}
+  .treeNode .cnt{margin-left:auto;font-size:11px;color:var(--muted);background:var(--paper);border:1px solid var(--line);padding:1px 8px;border-radius:999px;font-weight:700}
+  .treeRegion{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:#94a3b8;padding:10px 9px 4px}
+  .treeSite{padding-left:22px;font-size:12.5px}
+  .filterBar{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+  .filterBar input.search{flex:1;min-width:170px;height:36px;border:1px solid var(--line);border-radius:9px;padding:0 12px;font-family:var(--font);font-size:13.5px}
+  .filterBar input.search:focus,.filterBar select:focus{outline:none;border-color:var(--kw);box-shadow:0 0 0 3px var(--kw-50)}
+  .bulkBar{display:flex;align-items:center;gap:10px;padding:9px 13px;background:var(--kw-50);border:1px solid var(--kw-100);border-radius:9px;margin-bottom:11px;font-size:13px;flex-wrap:wrap}
+  .pager{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;font-size:12.5px;color:var(--muted);flex-wrap:wrap}
+  .pager .pg{display:flex;gap:6px;align-items:center}
+  .pager button{height:32px;min-width:34px;padding:0 9px;border:1px solid var(--line);background:var(--paper);border-radius:8px;cursor:pointer;font-weight:700;color:#334155}
+  .pager button:disabled{opacity:.4;cursor:default}
+  @media (max-width:900px){ .mgmtSummary{grid-template-columns:repeat(3,1fr)} .mgmtLayout{flex-direction:column} .treePanel{width:100%;flex:none;max-height:none} }
 
   @media (max-width:1000px){ .layout{grid-template-columns:1fr} aside.alerts{position:static} .kpiGrid{grid-template-columns:repeat(2,1fr)} .rGrid{grid-template-columns:repeat(2,1fr)} }
   @media (max-width:760px){ .navbar{display:none} .main{padding:14px} .hourGrid{grid-template-columns:repeat(6,1fr)} }
@@ -683,39 +705,100 @@ function renderReportBody(r){
       <ul class="guide">${guide}</ul></div>`;
 }
 
-/* ── 사업장 · 기기 관리 ── */
-let _sites=[], _kmap={};
+/* ── 사업장 · 기기 관리 (대규모 플릿) ── */
+let _sites=[], _regions=[], _kmap={}, _summary={}, _pageData={devices:[],total:0,page:1,pages:1};
+const mgmt={site_id:null,region:null,unassigned:false,kind:"",model:"",q:"",page:1,page_size:50,sel:new Set()};
+let _searchTimer=null;
 function renderDevices(){
   document.querySelector(".main").classList.remove("dashView");
   const demo=state.auth&&state.auth.is_demo;
   view.innerHTML=`
     <div class="paper ctxBar">
-      <div><h1>사업장 · 기기 관리</h1><div class="csub">사업장별로 AIR365 IoT 기기를 불러와 연결하고 모니터링·제어합니다</div></div>
+      <div><h1>사업장 · 기기 관리</h1><div class="csub">지역·사업장별로 AIR365 IoT 기기를 불러와 대규모로 관리·모니터링·제어합니다</div></div>
       ${demo?"":`<button class="btn light" id="addSiteBtn">+ 사업장 추가</button>
       <button class="btn primary" id="air365Btn">⬇ AIR365에서 기기 가져오기</button>`}
       <button class="btn" id="probeBtn">🔌 연결 점검</button>
     </div>
+    <div class="mgmtSummary" id="mgmtSummary"></div>
     <div class="paper panel">
       <div class="connBanner connWait" id="connBanner">케이웨더 AIR365 연결 상태 확인 중…</div>
       <div id="addSiteForm" style="display:none" class="addForm">
+        <div class="field"><label>지역</label><input id="siteRegion" placeholder="예: 영남"/></div>
         <div class="field"><label>사업장 이름</label><input id="siteName" placeholder="예: 부산 1공장"/></div>
         <div class="field"><label>주소(선택)</label><input id="siteAddr" placeholder="예: 부산광역시 강서구"/></div>
         <button class="btn primary" id="siteSaveBtn">사업장 등록</button>
       </div>
       <div id="air365Wrap"></div>
-      <div id="sitesWrap"><div class="empty" style="padding:12px">불러오는 중…</div></div>
+      <div class="mgmtLayout">
+        <aside class="treePanel paper" id="treePanel"></aside>
+        <div style="flex:1;min-width:0">
+          <div class="filterBar">
+            <input class="search" id="fltQ" placeholder="🔍 시리얼·이름 검색" value="${mgmt.q}"/>
+            <select id="fltKind"><option value="">전체 종류</option><option value="indoor">실내</option><option value="outdoor">실외</option></select>
+            <select id="fltModel"><option value="">전체 모델</option></select>
+          </div>
+          <div id="bulkBar"></div>
+          <table class="devTable"><thead><tr>
+            ${demo?"":`<th style="width:34px"><input type="checkbox" id="selAll"/></th>`}
+            <th>시리얼</th><th>이름</th><th class="center">종류 · 모델</th><th class="center">현재 체감</th><th class="center">상태</th>${demo?"":"<th>사업장</th>"}<th class="center">동작</th>
+          </tr></thead><tbody id="pageRows"><tr><td colspan="8" class="center"><div class="empty">불러오는 중…</div></td></tr></tbody></table>
+          <div class="pager" id="pager"></div>
+        </div>
+      </div>
       <div id="devDetail"></div>
     </div>`;
-  document.getElementById("probeBtn").onclick=loadSitesDevices;
+  document.getElementById("probeBtn").onclick=reloadMgmt;
   if(!demo){
-    document.getElementById("addSiteBtn").onclick=()=>{ const f=document.getElementById("addSiteForm");
-      f.style.display=f.style.display==="none"?"flex":"none"; };
+    document.getElementById("addSiteBtn").onclick=()=>{ const f=document.getElementById("addSiteForm"); f.style.display=f.style.display==="none"?"flex":"none"; };
     document.getElementById("siteSaveBtn").onclick=addSite;
     document.getElementById("air365Btn").onclick=openAir365;
   }
-  loadSitesDevices();
+  document.getElementById("fltQ").oninput=(e)=>{ mgmt.q=e.target.value; clearTimeout(_searchTimer); _searchTimer=setTimeout(()=>{ mgmt.page=1; loadPage(); },350); };
+  document.getElementById("fltKind").onchange=(e)=>{ mgmt.kind=e.target.value; mgmt.page=1; loadPage(); };
+  document.getElementById("fltModel").onchange=(e)=>{ mgmt.model=e.target.value; mgmt.page=1; loadPage(); };
+  reloadMgmt();
 }
-function siteOptions(sel){ return `<option value="">미배정</option>`+_sites.map(s=>`<option value="${s.id}" ${sel==s.id?"selected":""}>${s.name}</option>`).join(""); }
+async function reloadMgmt(){
+  const [sresp,sum,stat]=await Promise.all([
+    api("/api/sites").catch(()=>({sites:[],regions:[]})),
+    api("/api/devices/summary").catch(()=>({})),
+    api("/api/kweather/status").catch(()=>({}))]);
+  _sites=sresp.sites||[]; _regions=sresp.regions||[]; _summary=sum||{}; _kmap={}; (stat.devices||[]).forEach(d=>_kmap[d.serial]=d);
+  const bn=document.getElementById("connBanner");
+  if(bn){ if(stat.reachable){ bn.className="connBanner connOk"; bn.innerHTML=`✅ 케이웨더 AIR365 연결됨 · 계정 <b>${stat.account}</b> · 조회 가능 기기 <b>${(stat.seen||[]).length}</b>대`; }
+    else if(stat.configured){ bn.className="connBanner connBad"; bn.innerHTML=`⚠️ AIR365 응답 오류: ${stat.error||"연결 실패"}`; }
+    else { bn.className="connBanner connWait"; bn.innerHTML=`AIR365 자격증명 미설정 — 데모 기기만 표시됩니다.`; } }
+  renderSummary(); renderTree();
+  const ms=document.getElementById("fltModel");
+  if(ms){ const cur=mgmt.model; ms.innerHTML=`<option value="">전체 모델</option>`+(_summary.model_list||[]).map(m=>`<option value="${m}" ${cur===m?"selected":""}>${m}</option>`).join(""); }
+  loadPage();
+}
+function renderSummary(){
+  const s=_summary;
+  document.getElementById("mgmtSummary").innerHTML=[
+    ["총 기기",s.total||0],["지역",s.regions||0],["사업장",s.sites||0],
+    ["실내",s.indoor||0],["실외",s.outdoor||0],["미배정",s.unassigned||0]
+  ].map(([l,n])=>`<div class="sumCard"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
+}
+function setFilter(f){ Object.assign(mgmt,{site_id:null,region:null,unassigned:false},f,{page:1}); mgmt.sel.clear(); renderTree(); loadPage(); }
+function renderTree(){
+  const counts={}; _sites.forEach(s=>counts[s.id]=s.device_count);
+  const active=(f)=> (mgmt.site_id==f.site_id && mgmt.region==(f.region||null) && mgmt.unassigned==!!f.unassigned && !f.site_id===!mgmt.site_id) ;
+  let html=`<div class="treeNode ${(!mgmt.site_id&&!mgmt.region&&!mgmt.unassigned)?"active":""}" data-f='{}'>🗂 전체 기기<span class="cnt">${_summary.total||0}</span></div>`;
+  const byRegion={}; const noRegion=[];
+  _sites.forEach(s=>{ if(s.region){ (byRegion[s.region]=byRegion[s.region]||[]).push(s); } else noRegion.push(s); });
+  for(const reg of Object.keys(byRegion).sort()){
+    const rc=byRegion[reg].reduce((a,s)=>a+s.device_count,0);
+    html+=`<div class="treeRegion">${reg} · ${rc}대</div>`;
+    html+=`<div class="treeNode ${mgmt.region===reg?"active":""}" data-f='${JSON.stringify({region:reg})}'>📍 ${reg} 전체<span class="cnt">${rc}</span></div>`;
+    byRegion[reg].forEach(s=>{ html+=`<div class="treeNode treeSite ${mgmt.site_id===s.id?"active":""}" data-f='${JSON.stringify({site_id:s.id})}'>🏭 ${s.name}<span class="cnt">${s.device_count}</span></div>`; });
+  }
+  if(noRegion.length){ html+=`<div class="treeRegion">지역 미지정</div>`;
+    noRegion.forEach(s=>{ html+=`<div class="treeNode treeSite ${mgmt.site_id===s.id?"active":""}" data-f='${JSON.stringify({site_id:s.id})}'>🏭 ${s.name}<span class="cnt">${s.device_count}</span></div>`; }); }
+  html+=`<div class="treeNode ${mgmt.unassigned?"active":""}" data-f='{"unassigned":true}' style="margin-top:8px">📦 미배정 기기<span class="cnt">${_summary.unassigned||0}</span></div>`;
+  const tp=document.getElementById("treePanel"); tp.innerHTML=html;
+  tp.querySelectorAll("[data-f]").forEach(n=>n.onclick=()=>setFilter(JSON.parse(n.dataset.f)));
+}
 function devStatus(d){
   if(d.source==="demo") return {v:d.latest?`${d.latest.feels_like}℃`:"–", lvl:d.latest?.level_label||"", badge:`<span class="stBadge on">실시간</span>`};
   const k=_kmap[d.device_sn];
@@ -725,48 +808,75 @@ function devStatus(d){
   if(k.status==="unconfigured") return {v:"–",lvl:"",badge:`<span class="stBadge wait">자격증명 필요</span>`};
   return {v:"–",lvl:"",badge:`<span class="stBadge off">연결 실패</span>`};
 }
+function siteOptions(sel){ return `<option value="">미배정</option>`+_sites.map(s=>`<option value="${s.id}" ${sel==s.id?"selected":""}>${s.region?`[${s.region}] `:""}${s.name}</option>`).join(""); }
 function deviceRow(d, demo){
   const s=devStatus(d);
   const type=`<span class="kindBadge ${d.kind==="indoor"?"indoor":"outdoor"}">${d.kind==="indoor"?"실내":"실외"}</span> <span class="typeBadge">${d.model||d.device_type||"미상 모델"}</span>`;
-  const move=demo?"":`<select class="siteMini" data-move="${d.device_sn}">${siteOptions(d.site_id)}</select>`;
-  const act=`<button class="ctrlBtn" data-ctrl="${d.device_sn}">제어</button>
-    <button class="goBtn" data-go="${d.device_sn}">대시보드</button>`+
+  const move=demo?"":`<td><select class="siteMini" data-move="${d.device_sn}">${siteOptions(d.site_id)}</select></td>`;
+  const chk=demo?"":`<td class="center"><input type="checkbox" class="rowChk" data-chk="${d.device_sn}" ${mgmt.sel.has(d.device_sn)?"checked":""}/></td>`;
+  const act=`<button class="ctrlBtn" data-ctrl="${d.device_sn}">제어</button> <button class="goBtn" data-go="${d.device_sn}">대시보드</button>`+
     (demo||d.source==="demo"?"":` <button class="delBtn" data-del="${d.device_sn}">삭제</button>`);
-  return `<tr><td class="serial">${d.device_sn}</td><td>${d.name}</td><td class="center">${type}</td>
+  return `<tr>${chk}<td class="serial">${d.device_sn}</td><td>${d.name}</td><td class="center">${type}</td>
     <td class="center" style="font-weight:800">${s.v}${s.lvl?` <span style="color:var(--muted);font-weight:500;font-size:12px">${s.lvl}</span>`:""}</td>
-    <td class="center">${s.badge}</td><td>${move}</td><td class="center" style="white-space:nowrap">${act}</td></tr>`;
+    <td class="center">${s.badge}</td>${move}<td class="center" style="white-space:nowrap">${act}</td></tr>`;
 }
-function siteSection(title, addr, count, devs, demo, sid){
-  const del=(!demo&&sid)?`<button class="delBtn" data-delsite="${sid}" style="margin-left:8px">사업장 삭제</button>`:"";
-  const rows=devs.length?devs.map(d=>deviceRow(d,demo)).join(""):`<tr><td colspan="7" class="center"><div class="empty">이 사업장에 등록된 기기가 없습니다.</div></td></tr>`;
-  return `<div class="paper siteCard">
-    <div class="siteHead"><div class="sIco">🏭</div>
-      <div><div class="sName">${title}</div>${addr?`<div class="sAddr">${addr}</div>`:""}</div>
-      <span class="sCount">기기 ${count}대</span>${del}</div>
-    <table class="devTable"><thead><tr><th>시리얼</th><th>이름</th><th class="center">종류 · 모델</th><th class="center">현재 체감</th><th class="center">상태</th><th>사업장</th><th class="center">동작</th></tr></thead>
-    <tbody>${rows}</tbody></table></div>`;
-}
-async function loadSitesDevices(){
-  const [sresp,list,stat]=await Promise.all([
-    api("/api/sites").catch(()=>({sites:[]})), api("/api/devices"), api("/api/kweather/status").catch(()=>({}))]);
-  _sites=sresp.sites||[]; _kmap={}; (stat.devices||[]).forEach(d=>_kmap[d.serial]=d);
+async function loadPage(){
   const demo=state.auth&&state.auth.is_demo;
-  const bn=document.getElementById("connBanner");
-  if(bn){ if(stat.reachable){ bn.className="connBanner connOk"; bn.innerHTML=`✅ 케이웨더 AIR365 연결됨 · 계정 <b>${stat.account}</b> · 조회 가능 기기 <b>${(stat.seen||[]).length}</b>대`; }
-    else if(stat.configured){ bn.className="connBanner connBad"; bn.innerHTML=`⚠️ AIR365 응답 오류: ${stat.error||"연결 실패"}`; }
-    else { bn.className="connBanner connWait"; bn.innerHTML=`AIR365 자격증명 미설정 — 데모 기기만 표시됩니다.`; } }
-  const devs=list.devices||[]; state.devices=devs;
-  let html="";
-  for(const s of _sites){ const sd=devs.filter(d=>d.site_id===s.id); html+=siteSection(s.name,s.address,sd.length,sd,demo,s.id); }
-  const un=devs.filter(d=>!d.site_id);
-  if(un.length) html+=siteSection("미배정 기기","사업장에 배정되지 않은 기기",un.length,un,demo,null);
-  if(!_sites.length && !un.length) html=`<div class="empty" style="padding:18px">등록된 사업장·기기가 없습니다. ${demo?"":"‘+ 사업장 추가’ 후 ‘AIR365에서 기기 가져오기’로 시작하세요."}</div>`;
-  document.getElementById("sitesWrap").innerHTML=html;
+  const qs=new URLSearchParams({page:mgmt.page,page_size:mgmt.page_size});
+  if(mgmt.site_id)qs.set("site_id",mgmt.site_id); if(mgmt.region)qs.set("region",mgmt.region);
+  if(mgmt.unassigned)qs.set("unassigned","true"); if(mgmt.kind)qs.set("kind",mgmt.kind);
+  if(mgmt.model)qs.set("model",mgmt.model); if(mgmt.q)qs.set("q",mgmt.q);
+  const data=await api(`/api/devices/page?${qs}`).catch(()=>({devices:[],total:0,page:1,pages:1}));
+  _pageData=data; state.devices=data.devices;
+  const cols=demo?7:8;
+  const rows=data.devices.length?data.devices.map(d=>deviceRow(d,demo)).join(""):`<tr><td colspan="${cols}" class="center"><div class="empty">조건에 맞는 기기가 없습니다.</div></td></tr>`;
+  document.getElementById("pageRows").innerHTML=rows;
+  renderBulk(); renderPager();
   document.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>delDevice(b.dataset.del));
-  document.querySelectorAll("[data-delsite]").forEach(b=>b.onclick=()=>delSite(b.dataset.delsite));
   document.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>{ state.sn=b.dataset.go; state.view="dash"; setNav(); render(); });
   document.querySelectorAll("[data-ctrl]").forEach(b=>b.onclick=()=>showControl(b.dataset.ctrl));
   document.querySelectorAll("[data-move]").forEach(s=>s.onchange=()=>assignSite(s.dataset.move, s.value||null));
+  document.querySelectorAll(".rowChk").forEach(c=>c.onchange=()=>{ c.checked?mgmt.sel.add(c.dataset.chk):mgmt.sel.delete(c.dataset.chk); renderBulk(); });
+  const sa=document.getElementById("selAll"); if(sa) sa.onchange=()=>{ data.devices.forEach(d=>{ sa.checked?mgmt.sel.add(d.device_sn):mgmt.sel.delete(d.device_sn); }); loadPage(); };
+}
+function renderBulk(){
+  const el=document.getElementById("bulkBar"); if(!el)return;
+  if(!mgmt.sel.size){ el.innerHTML=""; return; }
+  el.innerHTML=`<b>${mgmt.sel.size}대 선택됨</b>
+    <span style="color:var(--muted)">일괄 이동:</span>
+    <select class="siteMini" id="bulkSite">${siteOptions(null)}</select>
+    <button class="btn light" id="bulkAssign">사업장 이동</button>
+    <button class="delBtn" id="bulkDel">선택 삭제</button>
+    <button class="ctrlBtn" id="bulkClear">선택 해제</button>`;
+  document.getElementById("bulkAssign").onclick=()=>bulkAction("assign",document.getElementById("bulkSite").value);
+  document.getElementById("bulkDel").onclick=()=>bulkAction("delete");
+  document.getElementById("bulkClear").onclick=()=>{ mgmt.sel.clear(); loadPage(); };
+}
+async function bulkAction(action,site_id){
+  const serials=[...mgmt.sel]; if(!serials.length)return;
+  if(action==="delete" && !confirm(`${serials.length}대를 삭제할까요?`))return;
+  const body={action,serials}; if(action==="assign") body.site_id=site_id?Number(site_id):null;
+  await fetch("/api/devices/bulk",{method:"POST",headers:authHeaders({"Content-Type":"application/json"}),body:JSON.stringify(body)});
+  mgmt.sel.clear(); reloadMgmt();
+}
+function renderPager(){
+  const d=_pageData, el=document.getElementById("pager"); if(!el)return;
+  const from=d.total?((d.page-1)*d.page_size+1):0, to=Math.min(d.total,d.page*d.page_size);
+  el.innerHTML=`<span>총 <b>${d.total}</b>대 중 ${from}–${to}</span>
+    <div class="pg">
+      <button id="pgFirst" ${d.page<=1?"disabled":""}>«</button>
+      <button id="pgPrev" ${d.page<=1?"disabled":""}>‹</button>
+      <span style="padding:0 6px">${d.page} / ${d.pages}</span>
+      <button id="pgNext" ${d.page>=d.pages?"disabled":""}>›</button>
+      <button id="pgLast" ${d.page>=d.pages?"disabled":""}>»</button>
+      <select class="siteMini" id="pgSize" style="margin-left:8px">${[20,50,100,200].map(n=>`<option ${mgmt.page_size===n?"selected":""}>${n}</option>`).join("")}</select>
+    </div>`;
+  const go=(p)=>{ mgmt.page=p; loadPage(); };
+  document.getElementById("pgFirst").onclick=()=>go(1);
+  document.getElementById("pgPrev").onclick=()=>go(d.page-1);
+  document.getElementById("pgNext").onclick=()=>go(d.page+1);
+  document.getElementById("pgLast").onclick=()=>go(d.pages);
+  document.getElementById("pgSize").onchange=(e)=>{ mgmt.page_size=Number(e.target.value); mgmt.page=1; loadPage(); };
 }
 function showControl(serial){
   const d=(state.devices||[]).find(x=>x.device_sn===serial); if(!d)return;
@@ -790,19 +900,21 @@ function showControl(serial){
 async function addSite(){
   const name=document.getElementById("siteName").value.trim(); if(!name){ alert("사업장 이름을 입력하세요."); return; }
   const address=document.getElementById("siteAddr").value.trim();
-  const r=await fetch("/api/sites",{method:"POST",headers:authHeaders({"Content-Type":"application/json"}),body:JSON.stringify({name,address})});
+  const region=document.getElementById("siteRegion").value.trim();
+  const r=await fetch("/api/sites",{method:"POST",headers:authHeaders({"Content-Type":"application/json"}),body:JSON.stringify({name,address,region})});
   if(!r.ok){ alert("사업장 등록 실패"); return; }
-  document.getElementById("siteName").value=""; document.getElementById("siteAddr").value=""; document.getElementById("addSiteForm").style.display="none";
-  loadSitesDevices();
+  document.getElementById("siteName").value=""; document.getElementById("siteAddr").value=""; document.getElementById("siteRegion").value="";
+  document.getElementById("addSiteForm").style.display="none";
+  reloadMgmt();
 }
 async function delSite(id){
   if(!confirm("사업장을 삭제할까요? (기기는 미배정으로 이동)"))return;
   await fetch(`/api/sites/${id}`,{method:"DELETE",headers:authHeaders()});
-  loadSitesDevices();
+  reloadMgmt();
 }
 async function assignSite(serial, site_id){
   await fetch(`/api/devices/${serial}/site`,{method:"PATCH",headers:authHeaders({"Content-Type":"application/json"}),body:JSON.stringify({site_id:site_id?Number(site_id):null})});
-  loadSitesDevices();
+  reloadMgmt();
 }
 async function openAir365(){
   const wrap=document.getElementById("air365Wrap");
@@ -835,12 +947,12 @@ async function doImport(){
   if(!r.ok){ const j=await r.json().catch(()=>({})); alert(j.detail||"가져오기 실패"); return; }
   const j=await r.json(); alert(`${j.count}대를 가져왔습니다.`);
   document.getElementById("air365Wrap").innerHTML=""; document.getElementById("air365Wrap").dataset.open="";
-  loadSitesDevices();
+  reloadMgmt();
 }
 async function delDevice(serial){
   if(!confirm(`${serial} 기기를 삭제할까요?`))return;
   await fetch(`/api/devices/${serial}`,{method:"DELETE",headers:authHeaders()});
-  loadSitesDevices();
+  reloadMgmt();
 }
 
 /* ── 실시간 연결(WS→폴링) ── */
