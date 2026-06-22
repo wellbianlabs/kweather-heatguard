@@ -112,8 +112,13 @@
   .cmp b{color:var(--sky);font-weight:800}
   .encl{margin-left:auto;font-size:10px;font-weight:800;color:#fff;background:var(--danger);padding:2px 7px;border-radius:6px}
   .spark{margin-top:11px;height:40px;width:100%}
-  .clock{font-variant-numeric:tabular-nums;font-weight:800;font-size:14px;color:#334155;letter-spacing:.3px}
+  .clockBox{text-align:right;line-height:1.1}
+  .clockDate{font-size:13.5px;font-weight:700;color:#475569}
+  .clockTime{font-size:30px;font-weight:800;color:var(--kw);font-variant-numeric:tabular-nums;letter-spacing:.5px;margin-top:2px}
+  .clockTime .ampm{font-size:14px;font-weight:700;color:var(--muted);margin-right:5px;letter-spacing:0}
+  .connWrap{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);margin-top:3px;justify-content:flex-end}
   .extPill{font-size:11.5px;font-weight:700;padding:4px 11px;border-radius:999px;background:#e7f5fc;color:#0a7fb8;border:1px solid #cfe9f7}
+  @media (max-width:760px){ .clockTime{font-size:24px} }
   aside.alerts{padding:16px;height:fit-content;position:sticky;top:22px}
   aside.alerts h2{font-size:12px;margin:0 0 11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:800}
   .alert{border-left:3px solid var(--danger);background:var(--gray-0);border-radius:9px;padding:10px 12px;margin-bottom:9px}
@@ -240,8 +245,11 @@ function renderDash(){
       <span class="extPill" id="extPill">기상청 외부 –℃</span>
       <span class="badge" id="modeBadge">${state.mode||"실시간"}</span>
       <div class="status">
-        <span class="clock" id="clock">--:--:--</span>
-        <span class="dot" id="dot"></span><span id="conn">연결 중…</span>
+        <div class="clockBox">
+          <div class="clockDate" id="clockDate">—</div>
+          <div class="clockTime" id="clock">--:--:--</div>
+        </div>
+        <div class="connWrap"><span class="dot" id="dot"></span><span id="conn">연결 중…</span></div>
       </div>
     </div>
     <div class="kpiGrid" id="kpiGrid"></div>
@@ -446,10 +454,18 @@ function renderReportBody(r){
 
 /* ── 실시간 연결(WS→폴링) ── */
 let pollTimer=null,prevAlertKey="";
-function nowKST(){ const d=new Date(); return new Date(d.getTime()+d.getTimezoneOffset()*60000+9*3600000); }
-function tickClock(){ const c=document.getElementById("clock"); if(c){ const d=nowKST();
-  c.textContent=d.toLocaleTimeString("ko-KR",{hour12:false}); } }
-setInterval(tickClock,1000);
+const DOW=["일","월","화","수","목","금","토"];
+function nowKST(){ return new Date(new Date().toLocaleString("en-US",{timeZone:"Asia/Seoul"})); }
+function tickClock(){
+  const d=nowKST();
+  const de=document.getElementById("clockDate");
+  if(de) de.textContent=`${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 (${DOW[d.getDay()]})`;
+  const ce=document.getElementById("clock");
+  if(ce){ let h=d.getHours(); const ap=h<12?"오전":"오후"; let hh=h%12; if(hh===0)hh=12;
+    const p=(n)=>String(n).padStart(2,"0");
+    ce.innerHTML=`<span class="ampm">${ap}</span>${p(hh)}:${p(d.getMinutes())}:${p(d.getSeconds())}`; }
+}
+tickClock(); setInterval(tickClock,1000);
 
 function applyLive(snap){
   state.live=snap;
