@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     KW_IOT_BASE_URL: str = "https://gateway.kweather.co.kr:8443/iot/groups/v2"
     KW_IOT_API_KEY: str = ""               # IoT api_key (없으면 mock 모드)
     KW_IOT_USER_ID: str = ""               # 계정 id (idType=USER), 예: test1@kweather.co.kr
+    KW_IOT_SERIALS: str = ""               # 등록할 실기기 시리얼(csv), 예: IST4W1800033
+    KW_IOT_VERIFY_SSL: bool = True         # 게이트웨이 인증서 검증
 
     # ── 실시간 수집 ──
     POLL_INTERVAL_SEC: int = 30            # last-all 폴링 주기

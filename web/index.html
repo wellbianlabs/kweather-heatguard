@@ -176,6 +176,30 @@
   .guide li{position:relative;padding:9px 12px 9px 30px;background:var(--gray-0);border-radius:var(--r-md);margin-bottom:7px;font-size:12.5px;line-height:1.5;color:#334155}
   .guide li::before{content:"✓";position:absolute;left:12px;top:9px;color:var(--kw);font-weight:800}
 
+  /* ── 기기 관리 ── */
+  .connBanner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;border-radius:var(--r-md);font-size:13px}
+  .connBanner.connOk{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46}
+  .connBanner.connBad{background:#fef2f2;border:1px solid #fecaca;color:#991b1b}
+  .connBanner.connWait{background:var(--gray-0);border:1px solid var(--line-soft);color:var(--muted)}
+  .devTable{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:14px}
+  .devTable th,.devTable td{padding:11px 14px;border-bottom:1px solid var(--line-soft);text-align:left}
+  .devTable th{font-size:12px;color:var(--muted);font-weight:700;background:var(--gray-0)}
+  .devTable th.center,.devTable td.center{text-align:center}
+  .devTable td.serial{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:700;color:#0f172a}
+  .srcBadge{font-size:11px;font-weight:700;padding:2px 9px;border-radius:6px}
+  .srcBadge.demo{background:var(--kw-50);color:var(--kw)}
+  .srcBadge.kweather{background:#e7f5fc;color:#0a7fb8}
+  .stBadge{font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px}
+  .stBadge.on{background:#dcfce7;color:#166534}
+  .stBadge.stale{background:#fef9c3;color:#854d0e}
+  .stBadge.off{background:#fee2e2;color:#991b1b}
+  .stBadge.wait{background:#f1f5f9;color:#475569}
+  .delBtn{font-size:12px;color:#dc2626;border:1px solid #fecaca;background:#fff;border-radius:8px;padding:5px 11px;cursor:pointer}
+  .goBtn{font-size:12px;color:var(--kw);border:1px solid var(--kw-100);background:var(--kw-50);border-radius:8px;padding:5px 11px;cursor:pointer}
+  .addForm{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:16px;padding-top:16px;border-top:1px solid var(--line-soft)}
+  .addForm input{height:36px;border:1px solid var(--line);border-radius:var(--r-md);padding:0 12px;font-family:var(--font);font-size:13.5px;min-width:160px}
+  .addForm input:focus{outline:none;border-color:var(--kw);box-shadow:0 0 0 3px var(--kw-50)}
+
   @media (max-width:1000px){ .layout{grid-template-columns:1fr} aside.alerts{position:static} .kpiGrid{grid-template-columns:repeat(2,1fr)} .rGrid{grid-template-columns:repeat(2,1fr)} }
   @media (max-width:760px){ .navbar{display:none} .main{padding:14px} .hourGrid{grid-template-columns:repeat(6,1fr)} }
   /* 화면이 좁거나 낮으면 무스크롤 그리드 해제 → 자연 흐름(스크롤 허용) */
@@ -220,6 +244,7 @@
     <div class="bottomNav">
       <div class="navlink active" id="nav-dash"><span class="ico">▦</span>대시보드</div>
       <div class="navlink" id="nav-report"><span class="ico">▤</span>리포트</div>
+      <div class="navlink" id="nav-devices"><span class="ico">⚙</span>기기 관리</div>
     </div>
     <div class="nav-footer">
       <div class="acct"><div class="avatar">HG</div><div class="who">HeatGuard<small>실시간 데모</small></div></div>
@@ -258,8 +283,8 @@ Promise.all([api("/api/thresholds").catch(()=>({})), api("/api/health").catch(()
 
 document.getElementById("nav-dash").onclick=()=>{ state.view="dash"; setNav(); render(); };
 document.getElementById("nav-report").onclick=()=>{ state.view="report"; setNav(); render(); };
-function setNav(){ document.getElementById("nav-dash").classList.toggle("active",state.view==="dash");
-  document.getElementById("nav-report").classList.toggle("active",state.view==="report"); }
+document.getElementById("nav-devices").onclick=()=>{ state.view="devices"; setNav(); render(); };
+function setNav(){ for(const v of ["dash","report","devices"]) document.getElementById("nav-"+v).classList.toggle("active",state.view===v); }
 
 function renderLegend(){
   document.getElementById("legend").innerHTML = ORDER.map(k=>{const v=LV[k];
@@ -267,7 +292,7 @@ function renderLegend(){
 }
 
 /* ── 라우터 ── */
-function render(){ if(state.view==="report") renderReport(); else renderDash(); }
+function render(){ if(state.view==="report") renderReport(); else if(state.view==="devices") renderDevices(); else renderDash(); }
 
 /* ── 대시보드 ── */
 function renderDash(){
@@ -484,6 +509,81 @@ function renderReportBody(r){
 
     <div class="rSection"><h2>5. 안전조치 가이드 <span class="sectionSub" style="font-weight:600">(고용노동부 2026 폭염 대책)</span></h2>
       <ul class="guide">${guide}</ul></div>`;
+}
+
+/* ── 기기 관리 ── */
+function renderDevices(){
+  document.querySelector(".main").classList.remove("dashView");
+  view.innerHTML=`
+    <div class="paper ctxBar">
+      <div><h1>기기 관리</h1><div class="csub">IoT 기기 시리얼 등록 및 케이웨더 API 연동 상태 관리</div></div>
+      <button class="btn light" id="probeBtn">🔌 케이웨더 API 연결 점검</button>
+    </div>
+    <div class="paper panel">
+      <div class="connBanner connWait" id="connBanner">케이웨더 API 연결 상태 확인 중…</div>
+      <table class="devTable"><thead><tr>
+        <th>시리얼 번호</th><th>이름</th><th class="center">구분</th><th class="center">소스</th>
+        <th class="center">현재 체감</th><th class="center">상태</th><th class="center">동작</th>
+      </tr></thead><tbody id="devRows"><tr><td colspan="7" class="center"><div class="empty">불러오는 중…</div></td></tr></tbody></table>
+      <div class="addForm">
+        <div class="field"><label>시리얼 번호</label><input id="addSerial" placeholder="예: IST4W1800033"/></div>
+        <div class="field"><label>이름(사업장)</label><input id="addName" placeholder="예: A현장 옥외작업장"/></div>
+        <div class="field"><label>구분</label><select id="addKind"><option value="outdoor">옥외</option><option value="indoor">실내</option></select></div>
+        <button class="btn primary" id="addBtn">+ 기기 등록</button>
+      </div>
+      <div class="infoTip" style="margin-top:12px">※ 데모 환경에서는 기기 등록이 임시(세션)로 유지됩니다. 영구 등록·시계열 저장은 서버(DB) 이식 단계에서 적용됩니다.
+        시리얼이 케이웨더 계정에 존재하면 해당 기기의 측정값이 API로 자동 연동됩니다.</div>
+    </div>`;
+  document.getElementById("probeBtn").onclick=loadDevices;
+  document.getElementById("addBtn").onclick=addDevice;
+  loadDevices();
+}
+async function loadDevices(){
+  const [list,stat]=await Promise.all([api("/api/devices"),api("/api/kweather/status").catch(()=>({}))]);
+  const kmap={}; (stat.devices||[]).forEach(d=>kmap[d.serial]=d);
+  const bn=document.getElementById("connBanner");
+  if(bn){
+    if(stat.reachable){ bn.className="connBanner connOk";
+      bn.innerHTML=`✅ 케이웨더 API 연결됨 · 계정 <b>${stat.account}</b> · 조회 가능 기기 <b>${(stat.seen||[]).length}</b>대`; }
+    else if(stat.configured){ bn.className="connBanner connBad"; bn.innerHTML=`⚠️ 케이웨더 API 응답 오류: ${stat.error||"연결 실패"}`; }
+    else { bn.className="connBanner connWait"; bn.innerHTML=`케이웨더 자격증명 미설정 — 실기기 연동을 위해 KW_IOT_API_KEY / KW_IOT_USER_ID 가 필요합니다(데모 기기만 표시).`; }
+  }
+  const rows=(list.devices||[]).map(d=>{
+    const isDemo=d.source==="demo", k=kmap[d.device_sn];
+    let feels="–",lvl="",st=`<span class="stBadge wait">점검 전</span>`;
+    if(isDemo){ feels=d.latest?`${d.latest.feels_like}℃`:"–"; lvl=d.latest?.level_label||""; st=`<span class="stBadge on">실시간</span>`; }
+    else if(k){
+      if(k.status==="online"){ feels=k.feels_like!=null?`${k.feels_like}℃`:"–";
+        st=k.stale?`<span class="stBadge stale">데이터 지연</span>`:`<span class="stBadge on">온라인</span>`; }
+      else if(k.status==="not_found") st=`<span class="stBadge off">계정에 없음</span>`;
+      else if(k.status==="unconfigured") st=`<span class="stBadge wait">자격증명 필요</span>`;
+      else st=`<span class="stBadge off">연결 실패</span>`;
+    }
+    const src=isDemo?`<span class="srcBadge demo">데모</span>`:`<span class="srcBadge kweather">케이웨더 API</span>`;
+    const act=isDemo?`<button class="goBtn" data-go="${d.device_sn}">대시보드</button>`
+      :`<button class="delBtn" data-del="${d.device_sn}">삭제</button>`;
+    return `<tr><td class="serial">${d.device_sn}</td><td>${d.name}</td><td class="center">${d.kind==="indoor"?"실내":"옥외"}</td>
+      <td class="center">${src}</td><td class="center" style="font-weight:800">${feels}${lvl?` <span style="color:var(--muted);font-weight:500;font-size:12px">${lvl}</span>`:""}</td>
+      <td class="center">${st}</td><td class="center">${act}</td></tr>`;
+  }).join("");
+  document.getElementById("devRows").innerHTML=rows||`<tr><td colspan="7" class="center"><div class="empty">등록된 기기가 없습니다.</div></td></tr>`;
+  document.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>delDevice(b.dataset.del));
+  document.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>{ state.sn=b.dataset.go; state.view="dash"; setNav(); render(); });
+}
+async function addDevice(){
+  const serial=document.getElementById("addSerial").value.trim(); if(!serial){ alert("시리얼 번호를 입력하세요."); return; }
+  const name=document.getElementById("addName").value.trim(), kind=document.getElementById("addKind").value;
+  const r=await fetch("/api/devices",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({serial,name,kind})});
+  if(!r.ok){ alert("등록 실패"); return; }
+  document.getElementById("addSerial").value=""; document.getElementById("addName").value="";
+  const dv=await api("/api/devices"); state.devices=dv.devices||state.devices;
+  loadDevices();
+}
+async function delDevice(serial){
+  if(!confirm(`${serial} 기기를 삭제할까요?`))return;
+  await fetch(`/api/devices/${serial}`,{method:"DELETE"});
+  const dv=await api("/api/devices"); state.devices=dv.devices||state.devices;
+  loadDevices();
 }
 
 /* ── 실시간 연결(WS→폴링) ── */

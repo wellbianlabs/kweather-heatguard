@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -92,7 +92,7 @@ async def live() -> dict:
 # ── 분석/리포트 API (STS 대시보드·리포트 기능 계승, 데모는 mock 시계열 기반) ──
 from datetime import date as _date  # noqa: E402
 
-from . import analytics, mock  # noqa: E402
+from . import analytics, devices as dev_registry, kw_iot, mock  # noqa: E402
 
 
 def _parse_date(s: str | None) -> _date:
@@ -139,12 +139,75 @@ def _downsample(points: list[dict], interval: int) -> list[dict]:
     return out
 
 
+def _demo_latest_by_serial() -> dict:
+    snap = mock.snapshot_at(mock.now_kst())
+    out = {}
+    for st in snap.get("stations", []):
+        lt = st.get("latest") or {}
+        out[st["sn"]] = {"feels_like": lt.get("feels_like"), "level": lt.get("level"),
+                         "level_label": lt.get("level_label"), "at": lt.get("measured_at")}
+    return out
+
+
 @app.get("/api/devices")
 def devices() -> dict:
-    return {"devices": [
-        {"device_sn": s["sn"], "location_name": s["name"], "kind": s["kind"]}
-        for s in mock.STATIONS
-    ]}
+    """등록 기기 목록(데모+케이웨더 시리얼). 데모 기기는 현재값 동봉(외부호출 없음)."""
+    demo = _demo_latest_by_serial()
+    items = []
+    for d in dev_registry.all_devices():
+        row = {"device_sn": d.serial, "location_name": d.name, "name": d.name,
+               "kind": d.kind, "location": d.location, "source": d.source}
+        if d.source == "demo":
+            row["latest"] = demo.get(d.serial)
+        items.append(row)
+    return {"devices": items, "kweather_configured": kw_iot.has_credentials(),
+            "kweather_account": settings.KW_IOT_USER_ID or None}
+
+
+@app.post("/api/devices")
+def add_device(payload: dict = Body(...)) -> dict:
+    serial = (payload.get("serial") or payload.get("device_sn") or "").strip()
+    if not serial:
+        raise HTTPException(400, "시리얼 번호가 필요합니다.")
+    d = dev_registry.add(serial, payload.get("name"), payload.get("kind", "outdoor"), payload.get("location"))
+    return {"ok": True, "device": dev_registry.as_dict(d)}
+
+
+@app.delete("/api/devices/{serial}")
+def delete_device(serial: str) -> dict:
+    if not dev_registry.remove(serial):
+        raise HTTPException(400, "삭제할 수 없는 기기입니다(데모 기기이거나 미등록).")
+    return {"ok": True}
+
+
+@app.get("/api/kweather/status")
+async def kweather_status() -> dict:
+    """케이웨더 IoT API 연결 점검 + 등록 시리얼별 연동 상태(기기 관리 페이지용)."""
+    pr = await kw_iot.probe()
+    seen_map = {s["serial"]: s for s in pr.get("seen", [])}
+    now = mock.now_kst()
+    devices_status = []
+    for d in dev_registry.all_devices():
+        if d.source != "kweather":
+            continue
+        hit = seen_map.get(d.serial)
+        if hit is None:
+            st = "not_found" if pr.get("reachable") else ("unconfigured" if not pr.get("configured") else "unreachable")
+            devices_status.append({"serial": d.serial, "name": d.name, "status": st})
+        else:
+            # 신선도 판단(응답 date YYYYMMDDHHMM)
+            stale = True
+            raw = str(hit.get("date") or "")
+            try:
+                mt = datetime.strptime(raw[:12], "%Y%m%d%H%M")
+                stale = (now - mt).total_seconds() > 3600
+            except Exception:  # noqa: BLE001
+                pass
+            devices_status.append({"serial": d.serial, "name": d.name, "status": "online",
+                                   "feels_like": hit.get("feels_like"), "temperature": hit.get("temperature"),
+                                   "humidity": hit.get("humidity"), "date": hit.get("date"), "stale": stale})
+    return {**pr, "devices": devices_status,
+            "registered": [d.serial for d in dev_registry.all_devices() if d.source == "kweather"]}
 
 
 @app.get("/api/dates")

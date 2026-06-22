@@ -29,7 +29,20 @@ async def fetch_last_all() -> list[dict]:
     """케이웨더 IoT last-all 실시간 측정값."""
     if settings.USE_MOCK or not (settings.KW_IOT_API_KEY and settings.KW_IOT_USER_ID):
         return mock.last_all_at(mock.now_kst())
+    return await fetch_real_readings()
 
+
+def has_credentials() -> bool:
+    return bool(settings.KW_IOT_API_KEY and settings.KW_IOT_USER_ID)
+
+
+async def fetch_real_readings() -> list[dict]:
+    """케이웨더 IoT last-all 실호출(USE_MOCK 무관) — 계정의 모든 기기 최신 측정값.
+
+    반환 dict 의 measured_at 은 응답의 date(KST 'YYYYMMDDHHMM') 파싱값.
+    """
+    if not has_credentials():
+        raise RuntimeError("KW_IOT 자격증명(KW_IOT_API_KEY / KW_IOT_USER_ID) 미설정")
     url = f"{settings.KW_IOT_BASE_URL}/last-all"
     params = {
         "stationType": "ALL",
@@ -37,7 +50,7 @@ async def fetch_last_all() -> list[dict]:
         "id": settings.KW_IOT_USER_ID,
         "api_key": settings.KW_IOT_API_KEY,
     }
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with httpx.AsyncClient(timeout=15.0, verify=settings.KW_IOT_VERIFY_SSL) as client:
         r = await client.get(url, params=params)
         r.raise_for_status()
         j = r.json()
@@ -61,8 +74,25 @@ async def fetch_last_all() -> list[dict]:
             except Exception:  # noqa: BLE001
                 mt = datetime.now()
             out.append({
-                "sn": sn, "name": it.get("stationName"), "kind": kind, "measured_at": mt,
+                "sn": sn, "name": it.get("stationName") or sn, "kind": kind, "measured_at": mt,
+                "raw_date": ts,
                 "temperature": temp, "humidity": humi, "feels_like": feels,
                 "co2": it.get("co2"), "pm10": it.get("pm10"), "pm25": it.get("pm25"), "voc": it.get("voc"),
             })
     return out
+
+
+async def probe() -> dict:
+    """연결 점검 — 계정에서 보이는 시리얼·최신시각을 요약(기기 관리 페이지용)."""
+    if not has_credentials():
+        return {"configured": False, "reachable": False, "account": settings.KW_IOT_USER_ID or None,
+                "seen": [], "error": "자격증명 미설정"}
+    try:
+        readings = await fetch_real_readings()
+    except Exception as e:  # noqa: BLE001
+        return {"configured": True, "reachable": False, "account": settings.KW_IOT_USER_ID,
+                "seen": [], "error": str(e)}
+    seen = [{"serial": r["sn"], "kind": r["kind"], "feels_like": r["feels_like"],
+             "temperature": r["temperature"], "humidity": r["humidity"],
+             "date": r.get("raw_date")} for r in readings]
+    return {"configured": True, "reachable": True, "account": settings.KW_IOT_USER_ID, "seen": seen}
