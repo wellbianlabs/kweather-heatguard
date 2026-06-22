@@ -63,7 +63,7 @@ async def fetch_real_readings() -> list[dict]:
         raise RuntimeError(j.get("message") or "KW IoT error")
     result = j.get("result", {}) or {}
     out: list[dict] = []
-    for kind, key in (("indoor", "iaqList"), ("outdoor", "oaqList")):
+    for kind, key, dtype in (("indoor", "iaqList", "실내공기질(IAQ)"), ("outdoor", "oaqList", "실외대기(OAQ)")):
         for it in result.get(key, []) or []:
             sn = it.get("serialNo") or it.get("stationName")
             if not sn:
@@ -78,9 +78,12 @@ async def fetch_real_readings() -> list[dict]:
                 mt = datetime.strptime(ts[:12], "%Y%m%d%H%M")
             except Exception:  # noqa: BLE001
                 mt = datetime.now()
+            metrics = [m for m, v in (("체감온도", feels), ("온도", temp), ("습도", humi),
+                       ("CO2", it.get("co2")), ("미세먼지", it.get("pm10")),
+                       ("초미세먼지", it.get("pm25")), ("VOC", it.get("voc"))) if v is not None]
             out.append({
-                "sn": sn, "name": it.get("stationName") or sn, "kind": kind, "measured_at": mt,
-                "raw_date": ts,
+                "sn": sn, "name": it.get("stationName") or sn, "kind": kind,
+                "device_type": dtype, "metrics": metrics, "measured_at": mt, "raw_date": ts,
                 "temperature": temp, "humidity": humi, "feels_like": feels,
                 "co2": it.get("co2"), "pm10": it.get("pm10"), "pm25": it.get("pm25"), "voc": it.get("voc"),
             })

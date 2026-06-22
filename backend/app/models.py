@@ -29,6 +29,22 @@ class Tenant(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     devices: Mapped[list["Device"]] = relationship(back_populates="tenant")
+    sites: Mapped[list["Site"]] = relationship(back_populates="tenant")
+
+
+class Site(Base):
+    """사업장 — 계정 아래, 기기 위의 계층(여러 사업장에 다종·다수 기기 설치)."""
+    __tablename__ = "sites"
+    __table_args__ = SCHEMA
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("heatguard.tenants.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    address: Mapped[str | None] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    tenant: Mapped["Tenant"] = relationship(back_populates="sites")
+    devices: Mapped[list["Device"]] = relationship(back_populates="site")
 
 
 class Device(Base):
@@ -37,11 +53,14 @@ class Device(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     tenant_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("heatguard.tenants.id", ondelete="CASCADE"), nullable=False)
+    site_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("heatguard.sites.id", ondelete="SET NULL"))
     serial: Mapped[str] = mapped_column(String, nullable=False)
     name: Mapped[str | None] = mapped_column(String)
     kind: Mapped[str] = mapped_column(String, default="outdoor", nullable=False)
+    device_type: Mapped[str | None] = mapped_column(String)
     location: Mapped[str | None] = mapped_column(String)
     source: Mapped[str] = mapped_column(String, default="kweather", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     tenant: Mapped["Tenant"] = relationship(back_populates="devices")
+    site: Mapped["Site"] = relationship(back_populates="devices")

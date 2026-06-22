@@ -24,7 +24,9 @@ def get(db: Session, tenant: Tenant, serial: str) -> Device | None:
     return db.scalar(select(Device).where(Device.tenant_id == tenant.id, Device.serial == serial))
 
 
-def add(db: Session, tenant: Tenant, serial: str, name: str | None, kind: str, location: str | None) -> Device:
+def add(db: Session, tenant: Tenant, serial: str, name: str | None, kind: str,
+        location: str | None, site_id: int | None = None, device_type: str | None = None,
+        source: str = "kweather") -> Device:
     serial = (serial or "").strip()
     if not serial:
         raise ValueError("시리얼 번호가 필요합니다.")
@@ -33,15 +35,28 @@ def add(db: Session, tenant: Tenant, serial: str, name: str | None, kind: str, l
         existing.name = (name or existing.name)
         existing.kind = "indoor" if kind == "indoor" else "outdoor"
         existing.location = location or existing.location
+        if site_id is not None:
+            existing.site_id = site_id
+        if device_type:
+            existing.device_type = device_type
         db.commit()
         return existing
     dev = Device(tenant_id=tenant.id, serial=serial, name=(name or serial),
                  kind=("indoor" if kind == "indoor" else "outdoor"),
-                 location=location, source="kweather")
+                 location=location, site_id=site_id, device_type=device_type, source=source)
     db.add(dev)
     db.commit()
     db.refresh(dev)
     return dev
+
+
+def assign_site(db: Session, tenant: Tenant, serial: str, site_id: int | None) -> bool:
+    dev = get(db, tenant, serial)
+    if dev is None:
+        return False
+    dev.site_id = site_id
+    db.commit()
+    return True
 
 
 def remove(db: Session, tenant: Tenant, serial: str) -> bool:
@@ -55,4 +70,5 @@ def remove(db: Session, tenant: Tenant, serial: str) -> bool:
 
 def as_dict(d: Device) -> dict:
     return {"device_sn": d.serial, "serial": d.serial, "name": d.name, "location_name": d.name,
-            "kind": d.kind, "location": d.location, "source": d.source}
+            "kind": d.kind, "device_type": d.device_type, "location": d.location,
+            "site_id": d.site_id, "source": d.source}

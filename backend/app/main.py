@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import analytics, auth, collector, devices as dev_db, kw_iot, mock
+from . import analytics, auth, collector, devices as dev_db, kw_iot, mock, sites as site_db
 from .config import settings
 from .database import SessionLocal, db_enabled
 from .deps import block_demo, get_db, get_tenant
@@ -207,8 +207,85 @@ def add_device(payload: dict = Body(...), tenant: Tenant = Depends(get_tenant), 
     serial = (payload.get("serial") or payload.get("device_sn") or "").strip()
     if not serial:
         raise HTTPException(400, "시리얼 번호가 필요합니다.")
-    d = dev_db.add(db, tenant, serial, payload.get("name"), payload.get("kind", "outdoor"), payload.get("location"))
+    d = dev_db.add(db, tenant, serial, payload.get("name"), payload.get("kind", "outdoor"),
+                   payload.get("location"), payload.get("site_id"), payload.get("device_type"))
     return {"ok": True, "device": dev_db.as_dict(d)}
+
+
+@app.patch("/api/devices/{serial}/site")
+def assign_device_site(serial: str, payload: dict = Body(...),
+                       tenant: Tenant = Depends(get_tenant), db: Session = Depends(get_db)) -> dict:
+    block_demo(tenant)
+    if not dev_db.assign_site(db, tenant, serial, payload.get("site_id")):
+        raise HTTPException(404, "기기를 찾을 수 없습니다.")
+    return {"ok": True}
+
+
+# ── 사업장(Site) ──
+@app.get("/api/sites")
+def list_sites(tenant: Tenant = Depends(get_tenant), db: Session = Depends(get_db)) -> dict:
+    counts = site_db.device_counts(db, tenant)
+    return {"sites": [site_db.as_dict(s, counts.get(s.id, 0)) for s in site_db.list_for(db, tenant)]}
+
+
+@app.post("/api/sites")
+def add_site(payload: dict = Body(...), tenant: Tenant = Depends(get_tenant), db: Session = Depends(get_db)) -> dict:
+    block_demo(tenant)
+    name = (payload.get("name") or "").strip()
+    if not name:
+        raise HTTPException(400, "사업장 이름이 필요합니다.")
+    s = site_db.add(db, tenant, name, payload.get("address"))
+    return {"ok": True, "site": site_db.as_dict(s, 0)}
+
+
+@app.delete("/api/sites/{site_id}")
+def delete_site(site_id: int, tenant: Tenant = Depends(get_tenant), db: Session = Depends(get_db)) -> dict:
+    block_demo(tenant)
+    if not site_db.remove(db, tenant, site_id):
+        raise HTTPException(404, "사업장을 찾을 수 없습니다.")
+    return {"ok": True}
+
+
+# ── AIR365 가져오기 ──
+@app.get("/api/air365/devices")
+async def air365_devices(tenant: Tenant = Depends(get_tenant), db: Session = Depends(get_db)) -> dict:
+    """케이웨더 AIR365 계정에 등록된 IoT 기기 목록(가져오기 후보). 이미 등록된 기기는 imported=true."""
+    owned = set(dev_db.serials_for(db, tenant))
+    try:
+        readings = await kw_iot.fetch_real_readings()
+    except Exception as e:  # noqa: BLE001
+        return {"reachable": False, "account": settings.KW_IOT_USER_ID or None, "error": str(e), "devices": []}
+    items = [{
+        "serial": r["sn"], "name": r["name"], "kind": r["kind"], "device_type": r.get("device_type"),
+        "metrics": r.get("metrics", []), "feels_like": r["feels_like"], "temperature": r["temperature"],
+        "humidity": r["humidity"], "date": r.get("raw_date"), "imported": r["sn"] in owned,
+    } for r in readings]
+    return {"reachable": True, "account": settings.KW_IOT_USER_ID, "devices": items}
+
+
+@app.post("/api/air365/import")
+async def air365_import(payload: dict = Body(...), tenant: Tenant = Depends(get_tenant), db: Session = Depends(get_db)) -> dict:
+    """선택한 AIR365 시리얼을 지정 사업장으로 가져오기(등록)."""
+    block_demo(tenant)
+    serials = payload.get("serials") or []
+    site_id = payload.get("site_id")
+    if not serials:
+        raise HTTPException(400, "가져올 기기를 선택하세요.")
+    if site_id is not None and site_db.get(db, tenant, site_id) is None:
+        raise HTTPException(400, "유효하지 않은 사업장입니다.")
+    try:
+        by = {r["sn"]: r for r in await kw_iot.fetch_real_readings()}
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(502, f"AIR365 조회 실패: {e}")
+    imported = []
+    for sn in serials:
+        r = by.get(sn)
+        if not r:
+            continue
+        d = dev_db.add(db, tenant, sn, r.get("name"), r["kind"], None, site_id,
+                       r.get("device_type"), source="air365")
+        imported.append(d.serial)
+    return {"ok": True, "imported": imported, "count": len(imported)}
 
 
 @app.delete("/api/devices/{serial}")
