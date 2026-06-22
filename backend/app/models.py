@@ -24,6 +24,8 @@ class Tenant(Base):
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     plan: Mapped[str | None] = mapped_column(String)                 # monthly | annual
     sub_status: Mapped[str] = mapped_column(String, default="none")  # active | demo | none | canceled
+    kw_user_id: Mapped[str | None] = mapped_column(String)           # 계정별 AIR365 계정 ID
+    kw_api_key: Mapped[str | None] = mapped_column(String)           # 계정별 AIR365 API 키
     plan_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     plan_renews_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

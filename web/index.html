@@ -715,13 +715,15 @@ function renderDevices(){
   view.innerHTML=`
     <div class="paper ctxBar">
       <div><h1>사업장 · 기기 관리</h1><div class="csub">지역·사업장별로 AIR365 IoT 기기를 불러와 대규모로 관리·모니터링·제어합니다</div></div>
-      ${demo?"":`<button class="btn light" id="addSiteBtn">+ 사업장 추가</button>
+      ${demo?"":`<button class="btn" id="air365SetBtn">🔗 AIR365 연동 설정</button>
+      <button class="btn light" id="addSiteBtn">+ 사업장 추가</button>
       <button class="btn primary" id="air365Btn">⬇ AIR365에서 기기 가져오기</button>`}
       <button class="btn" id="probeBtn">🔌 연결 점검</button>
     </div>
     <div class="mgmtSummary" id="mgmtSummary"></div>
     <div class="paper panel">
       <div class="connBanner connWait" id="connBanner">케이웨더 AIR365 연결 상태 확인 중…</div>
+      <div id="air365Settings"></div>
       <div id="addSiteForm" style="display:none" class="addForm">
         <div class="field"><label>지역</label><input id="siteRegion" placeholder="예: 영남"/></div>
         <div class="field"><label>사업장 이름</label><input id="siteName" placeholder="예: 부산 1공장"/></div>
@@ -752,6 +754,7 @@ function renderDevices(){
     document.getElementById("addSiteBtn").onclick=()=>{ const f=document.getElementById("addSiteForm"); f.style.display=f.style.display==="none"?"flex":"none"; };
     document.getElementById("siteSaveBtn").onclick=addSite;
     document.getElementById("air365Btn").onclick=openAir365;
+    document.getElementById("air365SetBtn").onclick=openSettings;
   }
   document.getElementById("fltQ").oninput=(e)=>{ mgmt.q=e.target.value; clearTimeout(_searchTimer); _searchTimer=setTimeout(()=>{ mgmt.page=1; loadPage(); },350); };
   document.getElementById("fltKind").onchange=(e)=>{ mgmt.kind=e.target.value; mgmt.page=1; loadPage(); };
@@ -914,6 +917,50 @@ async function delSite(id){
 }
 async function assignSite(serial, site_id){
   await fetch(`/api/devices/${serial}/site`,{method:"PATCH",headers:authHeaders({"Content-Type":"application/json"}),body:JSON.stringify({site_id:site_id?Number(site_id):null})});
+  reloadMgmt();
+}
+async function openSettings(){
+  const wrap=document.getElementById("air365Settings");
+  if(wrap.dataset.open==="1"){ wrap.innerHTML=""; wrap.dataset.open=""; return; }
+  wrap.dataset.open="1";
+  const s=await api("/api/integrations/air365").catch(()=>({}));
+  const status = s.connected
+    ? `<span class="stBadge on">연동됨</span> 계정 <b>${s.user_id}</b> · 키 ${s.api_key_masked||""}`
+    : (s.platform_fallback ? `<span class="stBadge stale">플랫폼 공용 키 사용 중</span> (내 계정 키 미설정)` : `<span class="stBadge off">미연동</span>`);
+  wrap.innerHTML=`<div class="air365Panel" style="border-color:var(--kw-100)">
+    <div class="air365Head" style="background:var(--kw-50);color:var(--kw)">🔗 AIR365 연동 설정 · ${status}</div>
+    <div style="padding:14px 16px">
+      <div class="infoTip" style="margin:0 0 12px">케이웨더에서 발급받은 <b>AIR365 API 키</b>와 <b>계정 ID</b>를 입력하세요.
+        ⚠️ 로그인 <b>비밀번호가 아니라 API 키</b>로 연동합니다(케이웨더 API는 비밀번호를 받지 않습니다).</div>
+      <div class="addForm" style="margin:0;padding:0;border:none">
+        <div class="field"><label>AIR365 계정 ID</label><input id="kwUser" placeholder="예: company@kweather.co.kr" value="${s.user_id||""}"/></div>
+        <div class="field"><label>API 키</label><input id="kwKey" placeholder="발급받은 서비스 키" type="password"/></div>
+        <button class="btn" id="kwTest">연결 테스트</button>
+        <button class="btn primary" id="kwSave">저장</button>
+        ${s.connected?`<button class="delBtn" id="kwDisc">연동 해제</button>`:""}
+      </div>
+      <div class="infoTip" id="kwMsg" style="margin-top:10px"></div>
+    </div></div>`;
+  document.getElementById("kwTest").onclick=()=>saveAir365(true);
+  document.getElementById("kwSave").onclick=()=>saveAir365(false);
+  const dc=document.getElementById("kwDisc"); if(dc) dc.onclick=disconnectAir365;
+}
+async function saveAir365(test){
+  const user_id=document.getElementById("kwUser").value.trim(), api_key=document.getElementById("kwKey").value.trim();
+  const msg=document.getElementById("kwMsg");
+  if(!user_id||!api_key){ msg.style.color="var(--danger)"; msg.textContent="계정 ID와 API 키를 모두 입력하세요."; return; }
+  msg.style.color="var(--muted)"; msg.textContent="확인 중…";
+  const r=await fetch("/api/integrations/air365",{method:"POST",headers:authHeaders({"Content-Type":"application/json"}),body:JSON.stringify({user_id,api_key,test})});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok){ msg.style.color="var(--danger)"; msg.textContent=j.detail||"실패했습니다."; return; }
+  msg.style.color="#166534";
+  msg.textContent=test?`✅ 연결 성공 · 조회 가능 기기 ${j.seen}대 (저장하려면 ‘저장’)`:`✅ 저장됨 · 조회 가능 기기 ${j.seen}대`;
+  if(!test){ document.getElementById("air365Settings").dataset.open=""; document.getElementById("air365Settings").innerHTML=""; reloadMgmt(); }
+}
+async function disconnectAir365(){
+  if(!confirm("AIR365 연동을 해제할까요?"))return;
+  await fetch("/api/integrations/air365",{method:"DELETE",headers:authHeaders()});
+  document.getElementById("air365Settings").innerHTML=""; document.getElementById("air365Settings").dataset.open="";
   reloadMgmt();
 }
 async function openAir365(){

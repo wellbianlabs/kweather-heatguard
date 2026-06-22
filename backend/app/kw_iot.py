@@ -51,24 +51,26 @@ def _clean(v: str | None) -> str:
     return (v or "").lstrip("﻿").strip()
 
 
-def has_credentials() -> bool:
-    return bool(_clean(settings.KW_IOT_API_KEY) and _clean(settings.KW_IOT_USER_ID))
+def resolve_creds(api_key: str | None = None, user_id: str | None = None) -> tuple[str, str]:
+    """계정별 자격증명 우선, 없으면 플랫폼 env 폴백."""
+    return _clean(api_key or settings.KW_IOT_API_KEY), _clean(user_id or settings.KW_IOT_USER_ID)
 
 
-async def fetch_real_readings() -> list[dict]:
+def has_credentials(api_key: str | None = None, user_id: str | None = None) -> bool:
+    k, u = resolve_creds(api_key, user_id)
+    return bool(k and u)
+
+
+async def fetch_real_readings(api_key: str | None = None, user_id: str | None = None) -> list[dict]:
     """케이웨더 IoT last-all 실호출(USE_MOCK 무관) — 계정의 모든 기기 최신 측정값.
 
     반환 dict 의 measured_at 은 응답의 date(KST 'YYYYMMDDHHMM') 파싱값.
     """
-    if not has_credentials():
-        raise RuntimeError("KW_IOT 자격증명(KW_IOT_API_KEY / KW_IOT_USER_ID) 미설정")
+    key, uid = resolve_creds(api_key, user_id)
+    if not (key and uid):
+        raise RuntimeError("AIR365 자격증명(API 키 / 계정 ID) 미설정")
     url = f"{_clean(settings.KW_IOT_BASE_URL)}/last-all"
-    params = {
-        "stationType": "ALL",
-        "idType": "USER",
-        "id": _clean(settings.KW_IOT_USER_ID),
-        "api_key": _clean(settings.KW_IOT_API_KEY),
-    }
+    params = {"stationType": "ALL", "idType": "USER", "id": uid, "api_key": key}
     async with httpx.AsyncClient(timeout=15.0, verify=settings.KW_IOT_VERIFY_SSL) as client:
         r = await client.get(url, params=params)
         r.raise_for_status()
@@ -105,15 +107,16 @@ async def fetch_real_readings() -> list[dict]:
     return out
 
 
-async def probe() -> dict:
+async def probe(api_key: str | None = None, user_id: str | None = None) -> dict:
     """연결 점검 — 계정에서 보이는 시리얼·최신시각을 요약(기기 관리 페이지용)."""
-    if not has_credentials():
-        return {"configured": False, "reachable": False, "account": settings.KW_IOT_USER_ID or None,
+    key, uid = resolve_creds(api_key, user_id)
+    if not (key and uid):
+        return {"configured": False, "reachable": False, "account": uid or None,
                 "seen": [], "error": "자격증명 미설정"}
     try:
-        readings = await fetch_real_readings()
+        readings = await fetch_real_readings(key, uid)
     except Exception as e:  # noqa: BLE001
-        return {"configured": True, "reachable": False, "account": settings.KW_IOT_USER_ID,
+        return {"configured": True, "reachable": False, "account": uid,
                 "seen": [], "error": str(e)}
     seen = [{"serial": r["sn"], "kind": r["kind"], "feels_like": r["feels_like"],
              "temperature": r["temperature"], "humidity": r["humidity"],

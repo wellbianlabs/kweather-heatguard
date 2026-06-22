@@ -155,7 +155,7 @@ async def _real_live(db: Session, tenant: Tenant) -> dict:
     devs = {d.serial: d for d in dev_db.list_for(db, tenant)}
     now = mock.now_kst()
     try:
-        readings = {r["sn"]: r for r in await kw_iot.fetch_real_readings()}
+        readings = {r["sn"]: r for r in await kw_iot.fetch_real_readings(tenant.kw_api_key, tenant.kw_user_id)}
     except Exception:  # noqa: BLE001
         readings = {}
     stations, alerts = [], []
@@ -293,17 +293,18 @@ def delete_site(site_id: int, tenant: Tenant = Depends(get_tenant), db: Session 
 async def air365_devices(tenant: Tenant = Depends(get_tenant), db: Session = Depends(get_db)) -> dict:
     """케이웨더 AIR365 계정에 등록된 IoT 기기 목록(가져오기 후보). 이미 등록된 기기는 imported=true."""
     owned = set(dev_db.serials_for(db, tenant))
+    acct = (tenant.kw_user_id or settings.KW_IOT_USER_ID) or None
     try:
-        readings = await kw_iot.fetch_real_readings()
+        readings = await kw_iot.fetch_real_readings(tenant.kw_api_key, tenant.kw_user_id)
     except Exception as e:  # noqa: BLE001
-        return {"reachable": False, "account": settings.KW_IOT_USER_ID or None, "error": str(e), "devices": []}
+        return {"reachable": False, "account": acct, "error": str(e), "devices": []}
     items = [{
         "serial": r["sn"], "name": r["name"], "kind": r["kind"], "model": r.get("model"),
         "device_type": r.get("device_type"),
         "metrics": r.get("metrics", []), "feels_like": r["feels_like"], "temperature": r["temperature"],
         "humidity": r["humidity"], "date": r.get("raw_date"), "imported": r["sn"] in owned,
     } for r in readings]
-    return {"reachable": True, "account": settings.KW_IOT_USER_ID, "devices": items}
+    return {"reachable": True, "account": acct, "devices": items}
 
 
 @app.post("/api/air365/import")
@@ -317,7 +318,7 @@ async def air365_import(payload: dict = Body(...), tenant: Tenant = Depends(get_
     if site_id is not None and site_db.get(db, tenant, site_id) is None:
         raise HTTPException(400, "유효하지 않은 사업장입니다.")
     try:
-        by = {r["sn"]: r for r in await kw_iot.fetch_real_readings()}
+        by = {r["sn"]: r for r in await kw_iot.fetch_real_readings(tenant.kw_api_key, tenant.kw_user_id)}
     except Exception as e:  # noqa: BLE001
         raise HTTPException(502, f"AIR365 조회 실패: {e}")
     imported = []
@@ -341,8 +342,8 @@ def delete_device(serial: str, tenant: Tenant = Depends(get_tenant), db: Session
 
 @app.get("/api/kweather/status")
 async def kweather_status(tenant: Tenant = Depends(get_tenant), db: Session = Depends(get_db)) -> dict:
-    kw_devs = [d for d in dev_db.list_for(db, tenant) if d.source == "kweather"]
-    pr = await kw_iot.probe()
+    kw_devs = [d for d in dev_db.list_for(db, tenant) if d.source in ("kweather", "air365")]
+    pr = await kw_iot.probe(tenant.kw_api_key, tenant.kw_user_id)
     seen_map = {s["serial"]: s for s in pr.get("seen", [])}
     now = mock.now_kst()
     devices_status = []
@@ -362,6 +363,53 @@ async def kweather_status(tenant: Tenant = Depends(get_tenant), db: Session = De
                                    "feels_like": hit.get("feels_like"), "temperature": hit.get("temperature"),
                                    "humidity": hit.get("humidity"), "date": hit.get("date"), "stale": stale})
     return {**pr, "devices": devices_status, "registered": [d.serial for d in kw_devs]}
+
+
+# ── AIR365 연동 설정(계정별 자격증명) ──
+def _mask(v: str | None) -> str | None:
+    if not v:
+        return None
+    v = v.strip()
+    return ("•" * max(0, len(v) - 4) + v[-4:]) if len(v) > 4 else "••••"
+
+
+@app.get("/api/integrations/air365")
+def air365_settings(tenant: Tenant = Depends(get_tenant)) -> dict:
+    """현재 연동 상태(키는 마스킹). 계정 자체 키 없으면 플랫폼 폴백 여부 안내."""
+    has_own = bool((tenant.kw_api_key or "").strip() and (tenant.kw_user_id or "").strip())
+    return {"connected": has_own, "user_id": tenant.kw_user_id,
+            "api_key_masked": _mask(tenant.kw_api_key),
+            "platform_fallback": (not has_own) and kw_iot.has_credentials(),
+            "base_url": settings.KW_IOT_BASE_URL}
+
+
+@app.post("/api/integrations/air365")
+async def air365_connect(payload: dict = Body(...), tenant: Tenant = Depends(get_tenant),
+                         db: Session = Depends(get_db)) -> dict:
+    """AIR365 계정 ID + API 키 저장. test=true 면 저장 전 연결만 점검."""
+    block_demo(tenant)
+    user_id = (payload.get("user_id") or "").strip()
+    api_key = (payload.get("api_key") or "").strip()
+    if not user_id or not api_key:
+        raise HTTPException(400, "AIR365 계정 ID와 API 키를 모두 입력하세요.")
+    pr = await kw_iot.probe(api_key, user_id)
+    if not pr.get("reachable"):
+        raise HTTPException(400, f"연결 실패: {pr.get('error') or 'API 키/계정 ID를 확인하세요.'}")
+    if payload.get("test"):
+        return {"ok": True, "reachable": True, "seen": len(pr.get("seen", [])), "saved": False}
+    tenant.kw_user_id = user_id
+    tenant.kw_api_key = api_key
+    db.commit()
+    return {"ok": True, "reachable": True, "seen": len(pr.get("seen", [])), "saved": True}
+
+
+@app.delete("/api/integrations/air365")
+def air365_disconnect(tenant: Tenant = Depends(get_tenant), db: Session = Depends(get_db)) -> dict:
+    block_demo(tenant)
+    tenant.kw_user_id = None
+    tenant.kw_api_key = None
+    db.commit()
+    return {"ok": True}
 
 
 @app.get("/api/kpi")
