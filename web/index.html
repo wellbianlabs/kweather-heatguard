@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>HeatGuard · 실시간 폭염대응</title>
+<title>CRMaaS 폭염 대응 솔루션</title>
 <link rel="icon" href="/assets/favicon.png" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -32,7 +32,17 @@
   .authLogo{height:34px;margin-bottom:14px}
   .authBrand h1{font-size:25px;font-weight:800;margin:0;line-height:1.25;letter-spacing:-.4px}
   .authSub{font-size:14px;color:var(--muted);font-weight:500;margin:8px 0 0}
-  .authBadge{display:inline-block;margin-top:12px;background:#e1f5ee;color:#0f6e56;font-weight:700;font-size:12.5px;padding:5px 15px;border-radius:999px}
+  .authBadge{display:inline-block;margin-top:12px;background:#fef3c7;color:#92400e;font-weight:700;font-size:12.5px;padding:5px 15px;border-radius:999px}
+  .planPick{display:flex;gap:10px;margin-bottom:6px}
+  .planCard{flex:1;position:relative;border:1.5px solid var(--line);border-radius:12px;padding:14px 10px 12px;cursor:pointer;text-align:center;background:var(--paper)}
+  .planCard:hover{border-color:var(--kw-100)}
+  .planCard.sel{border-color:var(--kw);background:var(--kw-50)}
+  .planName{font-size:12.5px;font-weight:700;color:#334155}
+  .planPrice{font-size:19px;font-weight:800;color:var(--kw);margin-top:4px;letter-spacing:-.5px}
+  .planPrice small{font-size:11px;font-weight:600;color:var(--muted);letter-spacing:0}
+  .planSub{font-size:10.5px;color:var(--muted);margin-top:4px;line-height:1.3}
+  .planRec{position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--kw);color:#fff;font-size:9.5px;font-weight:800;padding:2px 9px;border-radius:999px;white-space:nowrap}
+  .payNote{font-size:11px;color:var(--muted);text-align:center;margin-top:8px}
   .authTabs{display:flex;gap:6px;background:var(--gray-0);border-radius:10px;padding:4px;margin-bottom:18px}
   .authTab{flex:1;height:38px;border:none;background:transparent;border-radius:8px;font-family:var(--font);font-size:14px;font-weight:700;color:var(--muted);cursor:pointer}
   .authTab.active{background:var(--paper);color:var(--kw);box-shadow:var(--shadow-card)}
@@ -264,9 +274,9 @@
     <div class="authInner">
       <div class="authBrand">
         <img src="/assets/kweather-logo.png" alt="KWEATHER" class="authLogo" />
-        <h1>실시간 폭염대응 솔루션</h1>
+        <h1>CRMaaS 폭염 대응 솔루션</h1>
         <p class="authSub">IoT 체감온도 · 실시간 위험감지 · 폭염 안전관리</p>
-        <span class="authBadge">케이웨더 IoT 단말기 이용자 전용</span>
+        <span class="authBadge">프리미엄 SaaS · 월간/연간 구독</span>
       </div>
       <div class="authTabs">
         <button class="authTab active" id="tabLogin">로그인</button>
@@ -276,8 +286,8 @@
       <div class="authErr" id="authErr"></div>
       <div class="authOr"><span>또는</span></div>
       <button class="authDemoBtn" id="demoBtn">데모 계정으로 둘러보기</button>
-      <p class="authFoot">케이웨더 체감온도계 IoT 단말기 이용자 전용 서비스입니다. 회사별로 격리된 안전한 공간에서
-        실시간 데이터를 관리하며, 단말기 이용자는 <b>평생 무료</b>로 사용합니다.</p>
+      <p class="authFoot">케이웨더 IoT 체감온도계 기반 <b>구독형(SaaS)</b> 폭염 안전관리 솔루션입니다. 회사별로 격리된
+        공간에서 실시간 데이터를 관리합니다. 가입 시 결제는 데모 단계로 <b>실제 청구는 발생하지 않습니다.</b></p>
     </div>
     <div class="authCopy">© 2026 KWeather Inc. · 케이웨더(주)</div>
   </div>
@@ -297,7 +307,7 @@
   <aside class="navbar">
     <div class="nav-header">
       <img src="/assets/kweather-logo.png" alt="KWEATHER" />
-      <div class="brandTitle">실시간 폭염대응 솔루션</div>
+      <div class="brandTitle">CRMaaS 폭염 대응 솔루션</div>
       <div class="brandSub">IoT 체감온도 · 실시간 위험감지</div>
     </div>
     <div class="deviceBox">
@@ -345,17 +355,32 @@ const fmtMin=(m)=>{ if(!m||m<=0)return"0분"; const h=Math.floor(m/60),x=m%60; r
 
 /* ── 인증 게이트 ── */
 let authMode="login";
+const PLANS={
+  annual:{name:"연간 구독",price:"₩490,000",unit:"/년",sub:"월 ₩40,833 · 2개월 무료",rec:true},
+  monthly:{name:"월간 구독",price:"₩49,000",unit:"/월",sub:"매월 자동 결제",rec:false},
+};
+let authPlan="annual";
 function showAuth(){ document.getElementById("appShell").style.display="none"; document.getElementById("authScreen").style.display="flex"; renderAuthForm(); }
+function planPicker(){
+  return `<div class="planPick">${["annual","monthly"].map(c=>{const p=PLANS[c];
+    return `<div class="planCard ${authPlan===c?'sel':''}" data-plan="${c}">${p.rec?'<span class="planRec">가장 인기</span>':''}
+      <div class="planName">${p.name}</div><div class="planPrice">${p.price}<small>${p.unit}</small></div>
+      <div class="planSub">${p.sub}</div></div>`;}).join("")}</div>`;
+}
 function renderAuthForm(){
   const f=document.getElementById("authForm");
   const isLogin=authMode==="login";
   f.innerHTML=`<div class="authForm">
+    ${isLogin?"":planPicker()}
     <label>이메일</label><input id="auEmail" type="email" placeholder="name@company.com" autocomplete="username"/>
     ${isLogin?"":`<label>회사/사업장 이름</label><input id="auName" placeholder="예: 케이웨더 A현장"/>`}
     <label>비밀번호</label><input id="auPw" type="password" placeholder="${isLogin?'비밀번호':'6자 이상'}" autocomplete="${isLogin?'current-password':'new-password'}"/>
-    <button class="submit" id="auSubmit">${isLogin?"로그인":"회원가입"}</button>
+    <button class="submit" id="auSubmit">${isLogin?"로그인":"구독 시작하기"}</button>
+    ${isLogin?"":`<div class="payNote">🔒 결제는 데모 단계입니다 — 실제 청구는 발생하지 않습니다.</div>`}
   </div>`;
   document.getElementById("auSubmit").onclick=submitAuth;
+  f.querySelectorAll(".planCard").forEach(n=>n.onclick=()=>{ authPlan=n.dataset.plan;
+    f.querySelectorAll(".planCard").forEach(c=>c.classList.toggle("sel",c.dataset.plan===authPlan)); });
   f.querySelectorAll("input").forEach(i=>i.addEventListener("keydown",e=>{ if(e.key==="Enter")submitAuth(); }));
 }
 function setTab(m){ authMode=m; document.getElementById("tabLogin").classList.toggle("active",m==="login");
@@ -366,8 +391,9 @@ async function submitAuth(){
   const name=document.getElementById("auName")?.value.trim();
   if(!email||!pw){ err.textContent="이메일과 비밀번호를 입력하세요."; return; }
   const path=authMode==="login"?"/api/auth/login":"/api/auth/signup";
+  const body={email,password:pw,name}; if(authMode==="signup") body.plan=authPlan;
   try{
-    const r=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password:pw,name})});
+    const r=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     const j=await r.json();
     if(!r.ok){ err.textContent=j.detail||"실패했습니다."; return; }
     localStorage.setItem(KEY,j.api_key); state.auth=j; enterApp();
@@ -398,7 +424,8 @@ async function enterApp(){
 function renderAccount(){
   const a=state.auth||{}; const nm=a.name||a.email||"사용자";
   document.getElementById("acctAvatar").textContent=(a.is_demo?"데모":(nm[0]||"U")).slice(0,2);
-  document.getElementById("acctWho").innerHTML=`${nm}<small>${a.is_demo?"읽기 전용 데모":(a.email||"")}</small>`;
+  const sub=a.is_demo?"읽기 전용 데모":(a.plan_name?`${a.plan_name} · 구독중`:(a.email||""));
+  document.getElementById("acctWho").innerHTML=`${nm}<small>${sub}</small>`;
 }
 document.getElementById("tabLogin").onclick=()=>setTab("login");
 document.getElementById("tabSignup").onclick=()=>setTab("signup");
@@ -759,7 +786,7 @@ function connect(){
 }
 // KPI/차트 주기 갱신(대시보드)
 setInterval(()=>{ if(state.view==="dash"){ loadKpi(); loadTs(); } },30000);
-function flashAlert(){ document.title="🚨 폭염경보! · HeatGuard"; setTimeout(()=>document.title="HeatGuard · 실시간 폭염대응",4000); }
+function flashAlert(){ document.title="🚨 폭염경보! · CRMaaS"; setTimeout(()=>document.title="CRMaaS 폭염 대응 솔루션",4000); }
 </script>
 </body>
 </html>
