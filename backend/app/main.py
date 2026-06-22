@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import analytics, auth, collector, devices as dev_db, kw_iot, mock, sites as site_db
+from . import analytics, auth, collector, crypto, devices as dev_db, kw_iot, mock, sites as site_db
 from .config import settings
 from .database import SessionLocal, db_enabled
 from .deps import block_demo, get_db, get_tenant
@@ -155,7 +155,7 @@ async def _real_live(db: Session, tenant: Tenant) -> dict:
     devs = {d.serial: d for d in dev_db.list_for(db, tenant)}
     now = mock.now_kst()
     try:
-        readings = {r["sn"]: r for r in await kw_iot.fetch_real_readings(tenant.kw_api_key, tenant.kw_user_id)}
+        readings = {r["sn"]: r for r in await kw_iot.fetch_real_readings(crypto.decrypt(tenant.kw_api_key), tenant.kw_user_id)}
     except Exception:  # noqa: BLE001
         readings = {}
     stations, alerts = [], []
@@ -295,7 +295,7 @@ async def air365_devices(tenant: Tenant = Depends(get_tenant), db: Session = Dep
     owned = set(dev_db.serials_for(db, tenant))
     acct = (tenant.kw_user_id or settings.KW_IOT_USER_ID) or None
     try:
-        readings = await kw_iot.fetch_real_readings(tenant.kw_api_key, tenant.kw_user_id)
+        readings = await kw_iot.fetch_real_readings(crypto.decrypt(tenant.kw_api_key), tenant.kw_user_id)
     except Exception as e:  # noqa: BLE001
         return {"reachable": False, "account": acct, "error": str(e), "devices": []}
     items = [{
@@ -318,7 +318,7 @@ async def air365_import(payload: dict = Body(...), tenant: Tenant = Depends(get_
     if site_id is not None and site_db.get(db, tenant, site_id) is None:
         raise HTTPException(400, "유효하지 않은 사업장입니다.")
     try:
-        by = {r["sn"]: r for r in await kw_iot.fetch_real_readings(tenant.kw_api_key, tenant.kw_user_id)}
+        by = {r["sn"]: r for r in await kw_iot.fetch_real_readings(crypto.decrypt(tenant.kw_api_key), tenant.kw_user_id)}
     except Exception as e:  # noqa: BLE001
         raise HTTPException(502, f"AIR365 조회 실패: {e}")
     imported = []
@@ -343,7 +343,7 @@ def delete_device(serial: str, tenant: Tenant = Depends(get_tenant), db: Session
 @app.get("/api/kweather/status")
 async def kweather_status(tenant: Tenant = Depends(get_tenant), db: Session = Depends(get_db)) -> dict:
     kw_devs = [d for d in dev_db.list_for(db, tenant) if d.source in ("kweather", "air365")]
-    pr = await kw_iot.probe(tenant.kw_api_key, tenant.kw_user_id)
+    pr = await kw_iot.probe(crypto.decrypt(tenant.kw_api_key), tenant.kw_user_id)
     seen_map = {s["serial"]: s for s in pr.get("seen", [])}
     now = mock.now_kst()
     devices_status = []
@@ -378,7 +378,7 @@ def air365_settings(tenant: Tenant = Depends(get_tenant)) -> dict:
     """현재 연동 상태(키는 마스킹). 계정 자체 키 없으면 플랫폼 폴백 여부 안내."""
     has_own = bool((tenant.kw_api_key or "").strip() and (tenant.kw_user_id or "").strip())
     return {"connected": has_own, "user_id": tenant.kw_user_id,
-            "api_key_masked": _mask(tenant.kw_api_key),
+            "api_key_masked": _mask(crypto.decrypt(tenant.kw_api_key)),
             "platform_fallback": (not has_own) and kw_iot.has_credentials(),
             "base_url": settings.KW_IOT_BASE_URL}
 
@@ -398,7 +398,7 @@ async def air365_connect(payload: dict = Body(...), tenant: Tenant = Depends(get
     if payload.get("test"):
         return {"ok": True, "reachable": True, "seen": len(pr.get("seen", [])), "saved": False}
     tenant.kw_user_id = user_id
-    tenant.kw_api_key = api_key
+    tenant.kw_api_key = crypto.encrypt(api_key)
     db.commit()
     return {"ok": True, "reachable": True, "seen": len(pr.get("seen", [])), "saved": True}
 

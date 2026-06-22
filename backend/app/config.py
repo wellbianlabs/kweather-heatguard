@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     SLACK_WEBHOOK_URL: str = ""            # 비면 경보를 콘솔/WS 피드로만 송출
     ALERT_DEBOUNCE_SEC: int = 600          # 동일 기기·단계 재경보 억제(중복 방지)
 
+    # ── 보안 ──
+    APP_ENC_KEY: str = ""                  # 자격증명 암호화 키(임의 패스프레이즈, 비면 평문)
+
     # ── 저장 ──
     DATABASE_URL: str = ""                 # 비면 메모리 전용(PoC). 추후 TimescaleDB.
     HISTORY_POINTS: int = 240              # 기기별 메모리 링버퍼 길이(≈ 2시간/30초)
