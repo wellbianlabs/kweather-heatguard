@@ -10,6 +10,8 @@ from __future__ import annotations
 import math
 from datetime import date as date_cls, datetime, timedelta
 
+from .config import settings
+from .feels import kma_feels_like
 from .heat import LEVELS, classify
 
 # 기기 정의: base=기준 체감온도, amp=진폭, phase=위상. 일부는 위험단계를 넘나든다.
@@ -28,15 +30,60 @@ def now_kst() -> datetime:
     return datetime.utcnow() + timedelta(hours=9)
 
 
-def _feels_at(st: dict, ts: float) -> float:
-    drift = st["amp"] * math.sin(ts / _PERIOD_SEC * 2 * math.pi + st["phase"])
-    # 미세 흔들림(난수 대신 빠른 사인) — 그래프가 살아있게 보이도록
-    jitter = 0.4 * math.sin(ts / 11.0 + st["phase"] * 2)
-    return round(st["base"] + drift + jitter, 1)
+# ── 외부(기상청) 체감온도 합성 — STS MockWeatherProvider 방식 ───────────────
+# 지역 관측소(ASOS) 기준 야외 기온/습도 → 기상청 공식 체감온도. 일주기(저온 새벽·고온 오후).
+# 산업현장 내부가 외부보다 높게 측정되도록 외부값은 보수적으로 생성(밀폐형 경보 시연).
+def external_point(when: datetime) -> dict:
+    hour_f = when.hour + when.minute / 60.0
+    ta = round(28.5 + 5.5 * _diurnal(hour_f), 1)                 # 야외 기온(여름철, 보수적)
+    hm = round(max(35.0, min(85.0, 80.0 - (ta - 22.0) * 1.6)))   # 습도(기온 역상관 추정)
+    feels = kma_feels_like(ta, hm)
+    return {"temperature": ta, "humidity": float(hm), "feels": feels}
+
+
+def external_series(on: date_cls, step_min: int = 10) -> list[dict]:
+    out: list[dict] = []
+    steps = (24 * 60) // step_min
+    for i in range(steps):
+        when = datetime(on.year, on.month, on.day) + timedelta(minutes=i * step_min)
+        p = external_point(when)
+        out.append({"at": when.isoformat(), **p})
+    return out
+
+
+def _delta(inner: float | None, outer: float | None) -> float | None:
+    if inner is None or outer is None:
+        return None
+    return round(inner - outer, 1)
+
+
+def attach_external(snapshot: dict, now: datetime) -> dict:
+    """라이브 스냅샷의 각 기기에 외부(기상청) 체감 + 내·외부 차이(delta)·밀폐형 경보를 부착."""
+    ext = external_point(now)
+    snapshot["external"] = {**ext, "at": now.isoformat()}
+    for st in snapshot.get("stations", []):
+        lt = st.get("latest")
+        if not lt:
+            continue
+        d = _delta(lt.get("feels_like"), ext["feels"])
+        lt["external_feels"] = ext["feels"]
+        lt["external_temp"] = ext["temperature"]
+        lt["external_humidity"] = ext["humidity"]
+        lt["delta"] = d
+        lt["enclosed"] = d is not None and d >= settings.ENCLOSED_DELTA_ALERT
+    return snapshot
+
+
+def _feels_at(st: dict, when: datetime) -> float:
+    # 실제 시각 기준 일중 곡선(diurnal) + 초단위 미세 변동 — 라이브와 시계열/외부를 정합.
+    p = DAY_PARAMS.get(st["sn"], {"mean": 30.0, "amp": 4.0})
+    hour_f = when.hour + when.minute / 60.0
+    jitter = 0.45 * math.sin(when.timestamp() / 13.0 + st["phase"])
+    return round(p["mean"] + p["amp"] * _diurnal(hour_f) + _date_offset(when.date()) + jitter, 1)
 
 
 def _reading(st: dict, when: datetime) -> dict:
-    feels = _feels_at(st, when.timestamp())
+    feels = _feels_at(st, when)
     humi = round(max(35.0, min(85.0, 60.0 - (feels - 33.0) * 2)))
     temp = round(feels - 1.5, 1)
     return {
@@ -86,7 +133,8 @@ def snapshot_at(now: datetime) -> dict:
                 "feels_like": r["feels_like"], "action": ACTION.get(lvl.code, ""),
             })
     alerts.sort(key=lambda a: a["feels_like"], reverse=True)
-    return {"stations": stations, "alerts": alerts, "ts": now.isoformat()}
+    snap = {"stations": stations, "alerts": alerts, "ts": now.isoformat()}
+    return attach_external(snap, now)
 
 
 # ── 일별/주간 시계열(리포트·차트용) ─────────────────────────────────────────

@@ -78,16 +78,15 @@ async def live() -> dict:
     # stateless 합성으로 폴백 — 동일 대시보드가 sts(WS)·Vercel(폴링) 양쪽에서 동작.
     snap = store.snapshot()
     if snap["stations"]:
-        return snap
+        return mock.attach_external(snap, mock.now_kst())
     if settings.USE_MOCK or not settings.KW_IOT_API_KEY:
-        from . import mock
         return mock.snapshot_at(mock.now_kst())
     # 실계정·무워커: last-all 1회 조회로 현재값만(히스토리 없음)
     from .kw_iot import fetch_last_all
     readings = await fetch_last_all()
     for r in readings:
         store.ingest(r)
-    return store.snapshot()
+    return mock.attach_external(store.snapshot(), mock.now_kst())
 
 
 # ── 분석/리포트 API (STS 대시보드·리포트 기능 계승, 데모는 mock 시계열 기반) ──
@@ -166,9 +165,25 @@ def kpi(sn: str | None = None, date: str | None = None) -> dict:
 def timeseries(sn: str, date: str | None = None, interval: int = 10) -> dict:
     on = _parse_date(date)
     is_today = on == mock.now_kst().date()
-    pts = _points_for(sn, on, is_today)
+    pts = _downsample(_points_for(sn, on, is_today), interval)
+    # 외부(기상청) 체감 라인 — 같은 시각 기준 병합(내부 vs 외부 비교)
+    ext = {p["at"]: p for p in _downsample(
+        [{"at": e["at"], "feels_like": e["feels"], "temperature": e["temperature"]} for e in mock.external_series(on)],
+        interval)}
+    max_delta = None
+    for p in pts:
+        e = ext.get(p["at"])
+        ef = e["feels_like"] if e else None
+        p["external_feels"] = ef
+        if p.get("feels_like") is not None and ef is not None:
+            d = round(p["feels_like"] - ef, 1)
+            p["delta"] = d
+            if max_delta is None or d > max_delta:
+                max_delta = d
     return {"device_sn": sn, "date": on.isoformat(), "interval_minutes": interval,
-            "points": _downsample(pts, interval)}
+            "points": pts, "max_delta": max_delta,
+            "enclosed_alert": max_delta is not None and max_delta >= settings.ENCLOSED_DELTA_ALERT,
+            "enclosed_threshold": settings.ENCLOSED_DELTA_ALERT}
 
 
 @app.get("/api/weekly")
@@ -184,11 +199,32 @@ def report_daily(sn: str, date: str | None = None) -> dict:
     is_today = on == mock.now_kst().date()
     pts = mock.today_series(sn, mock.now_kst()) if is_today else mock.day_series(sn, on)
     data = analytics.daily_from_points(pts)
+
+    # 내·외부(기상청) 체감온도 비교 — 시간별 외부 체감 산출 후 내부와 대조
+    ext_by_hour: dict[int, list[float]] = {}
+    for e in mock.external_series(on):
+        h = datetime.fromisoformat(e["at"]).hour
+        if e["feels"] is not None:
+            ext_by_hour.setdefault(h, []).append(e["feels"])
+    compare = []
+    max_delta = None
+    for hr in data["hours"]:
+        ev = ext_by_hour.get(hr["hour"])
+        ef = round(sum(ev) / len(ev), 1) if ev else None
+        d = round(hr["feels"] - ef, 1) if (hr["feels"] is not None and ef is not None) else None
+        if d is not None and (max_delta is None or d > max_delta):
+            max_delta = d
+        compare.append({"hour": hr["hour"], "indoor_feels": hr["feels"], "external_feels": ef,
+                        "delta": d, "color": hr["color"]})
+    enclosed = max_delta is not None and max_delta >= settings.ENCLOSED_DELTA_ALERT
+
     return {
         "device_sn": sn, "date": on.isoformat(),
         "location_name": st["name"] if st else sn,
         "kind": st["kind"] if st else None,
         "generated_at": mock.now_kst().isoformat(),
+        "compare": compare, "max_delta": max_delta,
+        "enclosed_alert": enclosed, "enclosed_threshold": settings.ENCLOSED_DELTA_ALERT,
         **data,
     }
 
@@ -197,7 +233,7 @@ def report_daily(sn: str, date: str | None = None) -> dict:
 async def ws_live(ws: WebSocket) -> None:
     await manager.connect(ws)
     try:
-        await ws.send_json({"type": "snapshot", "data": store.snapshot()})
+        await ws.send_json({"type": "snapshot", "data": mock.attach_external(store.snapshot(), mock.now_kst())})
         while True:
             await ws.receive_text()   # 클라이언트 keepalive/ping 수신(무시)
     except WebSocketDisconnect:

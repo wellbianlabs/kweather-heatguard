@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from . import alerts
+from . import alerts, mock
 from .config import settings
 from .kw_iot import fetch_last_all
 from .store import store
@@ -27,8 +27,9 @@ async def _poll_once() -> None:
             store.add_alert(alert)
             fired.append(alert)
             await alerts.dispatch(alert)
-    # 라이브 대시보드로 최신 스냅샷 푸시
-    await manager.broadcast({"type": "snapshot", "data": store.snapshot()})
+    # 라이브 대시보드로 최신 스냅샷 푸시(외부 기상청 체감 비교 부착)
+    snap = mock.attach_external(store.snapshot(), mock.now_kst())
+    await manager.broadcast({"type": "snapshot", "data": snap})
     for alert in fired:
         await manager.broadcast({"type": "alert", "data": alert})
 

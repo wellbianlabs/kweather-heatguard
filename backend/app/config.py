@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     HEAT_WARNING: float = 35.0     # 경고
     HEAT_DANGER: float = 38.0      # 위험 (폭염중대경보)
 
+    # 내부(측정) 체감이 외부(기상청)보다 이 값 이상 높으면 '밀폐형 폭염 사업장' 경보(STS 계승)
+    ENCLOSED_DELTA_ALERT: float = 5.0
+
     # ── 케이웨더 IoT Open API (last-all 폴링) ──
     KW_IOT_BASE_URL: str = "https://gateway.kweather.co.kr:8443/iot/groups/v2"
     KW_IOT_API_KEY: str = ""               # IoT api_key (없으면 mock 모드)
