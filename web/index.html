@@ -130,6 +130,27 @@
   .panel{padding:16px 18px}
   .chartWrap{height:280px;position:relative;margin-top:12px}
 
+  /* ── 한 화면(무스크롤) 대시보드 그리드 ── */
+  .main.dashView{height:100vh;overflow:hidden;padding:16px}
+  .main.dashView .container{height:100%;max-width:1480px;gap:12px}
+  .dashBody{flex:1;min-height:0;display:grid;gap:12px;
+    grid-template-columns:minmax(300px,1.05fr) minmax(0,1.5fr) 300px;
+    grid-template-rows:1fr 1fr;
+    grid-template-areas:"cards chart alerts" "cards week alerts"}
+  .dCards{grid-area:cards;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:12px;min-height:0}
+  .tsCell{grid-area:chart} .weekCell{grid-area:week}
+  .dashBody .alerts{grid-area:alerts;position:static;overflow-y:auto;top:auto}
+  .panel.flex{display:flex;flex-direction:column;min-height:0;padding:13px 15px}
+  .chartFill{flex:1;min-height:0;position:relative;margin-top:8px}
+  .main.dashView .kpi{padding:12px 15px}
+  .main.dashView .kpi .kval{font-size:26px;margin-top:9px}
+  .main.dashView .kpi .ksub{margin-top:5px}
+  .card.mini{display:flex;flex-direction:column;min-height:0;overflow:hidden;padding:13px 14px}
+  .card.mini .feels{font-size:30px;margin:4px 0 3px}
+  .card.mini .meta{margin-top:8px}
+  .card.mini .cmp{margin-top:7px;padding-top:7px}
+  .card.mini .spark{height:30px;margin-top:auto}
+
   /* ── 리포트 ── */
   .report{padding:26px 30px}
   .rHead{text-align:center;border-bottom:2px solid var(--kw);padding-bottom:16px;margin-bottom:18px}
@@ -155,6 +176,16 @@
 
   @media (max-width:1000px){ .layout{grid-template-columns:1fr} aside.alerts{position:static} .kpiGrid{grid-template-columns:repeat(2,1fr)} .rGrid{grid-template-columns:repeat(2,1fr)} }
   @media (max-width:760px){ .navbar{display:none} .main{padding:14px} .hourGrid{grid-template-columns:repeat(6,1fr)} }
+  /* 화면이 좁거나 낮으면 무스크롤 그리드 해제 → 자연 흐름(스크롤 허용) */
+  @media (max-width:1100px), (max-height:660px){
+    .main.dashView{height:auto;overflow:visible;padding:16px}
+    .main.dashView .container{height:auto}
+    .dashBody{grid-template-columns:1fr;grid-template-rows:none;grid-template-areas:"cards" "chart" "week" "alerts"}
+    .dCards{grid-template-rows:auto}
+    .dashBody .alerts{overflow:visible}
+    .card.mini .spark{height:38px}
+    .chartFill{height:240px}
+  }
 
   @media print{
     .navbar,.ctxBar .field,.ctxBar .btn,.status,.printHide{display:none!important}
@@ -238,6 +269,7 @@ function render(){ if(state.view==="report") renderReport(); else renderDash(); 
 
 /* ── 대시보드 ── */
 function renderDash(){
+  document.querySelector(".main").classList.add("dashView");
   view.innerHTML = `
     <div class="paper ctxBar">
       <div><h1>실시간 현황</h1><div class="csub">사업장·기기별 체감온도 실시간 모니터링 및 폭염 위험감지</div></div>
@@ -253,18 +285,17 @@ function renderDash(){
       </div>
     </div>
     <div class="kpiGrid" id="kpiGrid"></div>
-    <div class="sectionTitle">실시간 측정 현황 <span class="sectionSub">기기별 현재 체감온도</span></div>
-    <div class="layout">
-      <div class="grid" id="grid"></div>
+    <div class="dashBody">
+      <div class="dCards" id="grid"></div>
+      <div class="paper panel flex tsCell">
+        <div class="sectionTitle">데이터 분석 <span class="sectionSub">오늘 내부 체감 vs 기상청 외부 체감</span></div>
+        <div class="chartFill"><canvas id="tsChart"></canvas></div>
+      </div>
+      <div class="paper panel flex weekCell">
+        <div class="sectionTitle">최근 7일 체감온도 <span class="sectionSub">일 최고(막대)·일 평균(선)</span></div>
+        <div class="chartFill"><canvas id="weekChart"></canvas></div>
+      </div>
       <aside class="alerts paper"><h2>경보 피드</h2><div id="alerts"><div class="empty">아직 경보가 없습니다.</div></div></aside>
-    </div>
-    <div class="paper panel">
-      <div class="sectionTitle">데이터 분석 <span class="sectionSub">오늘 시간대별 내부 체감 vs 기상청 외부 체감</span></div>
-      <div class="chartWrap"><canvas id="tsChart"></canvas></div>
-    </div>
-    <div class="paper panel">
-      <div class="sectionTitle">최근 7일 체감온도 <span class="sectionSub">일 최고(막대)·일 평균(선)·위험단계 임계</span></div>
-      <div class="chartWrap"><canvas id="weekChart"></canvas></div>
     </div>`;
   document.getElementById("dashSn").value=state.sn;
   document.getElementById("dashSn").onchange=(e)=>{ state.sn=e.target.value; loadKpi(); loadTs(); loadWeek(); };
@@ -353,7 +384,7 @@ function card(st){
   const dStr=(d==null)?"":(d>0?`+${d}`:`${d}`);
   const dCol=(d!=null&&d>0)?LV.warning.color:"var(--muted)";
   const ext=(ef!=null)?`<div class="cmp"><span>기상청 외부 <b>${ef}℃</b></span><span style="color:${dCol}">차이 ${dStr}℃</span>${lt.enclosed?`<span class="encl">밀폐형</span>`:""}</div>`:"";
-  return `<div class="paper card"><div class="bar" style="background:${lv.color}"></div>
+  return `<div class="paper card mini"><div class="bar" style="background:${lv.color}"></div>
     <div class="cname">${st.name} <span class="kind">${st.kind==="indoor"?"실내":"옥외"}</span></div>
     <div class="feels" style="color:${lv.color}">${lt.feels_like??"–"}<small> ℃ 체감</small></div>
     <span class="level" style="background:${lv.color}">${lv.label}</span>
@@ -384,6 +415,7 @@ function renderSidebar(sts){
 
 /* ── 리포트 ── */
 function renderReport(){
+  document.querySelector(".main").classList.remove("dashView");
   const sn=state.sn||(state.devices[0]&&state.devices[0].device_sn)||"";
   view.innerHTML=`
     <div class="paper ctxBar printHide">
