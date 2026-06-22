@@ -6,66 +6,63 @@
 <title>HeatGuard · 실시간 폭염대응</title>
 <link rel="icon" href="/assets/favicon.png" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
   :root{
-    /* STS 브랜드 토큰 계승(theme.ts) */
     --kw:#0f499e; --kw-50:#eef4fb; --kw-100:#dbe7f7; --sky:#1790cd;
     --bg:#f7f8fa; --paper:#ffffff; --text:#1e293b; --muted:#64748b;
     --line:#dee2e6; --line-soft:#e9ecef; --gray-0:#f8f9fa;
-    /* 폭염 위험단계(사이드바 범례 일치) */
     --safe:#16a34a; --attention:#84cc16; --caution:#eab308; --warning:#f97316; --danger:#dc2626;
     --r-md:12px; --r-lg:16px;
     --shadow-card:0 1px 2px rgba(15,23,42,.04), 0 4px 16px rgba(15,23,42,.04);
-    --shadow-lift:0 2px 4px rgba(15,23,42,.05), 0 12px 32px rgba(15,23,42,.08);
     --font:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Malgun Gothic",sans-serif;
   }
   *{box-sizing:border-box}
   html,body{height:100%}
   body{margin:0;font-family:var(--font);background:var(--bg);color:var(--text);
-    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;letter-spacing:-0.01em}
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;letter-spacing:-.01em}
   ::-webkit-scrollbar{width:10px;height:10px}
   ::-webkit-scrollbar-thumb{background:#e2e8f0;border-radius:8px;border:3px solid var(--bg)}
-  ::-webkit-scrollbar-thumb:hover{background:#cbd5e1}
-
   .shell{display:flex;min-height:100vh}
 
-  /* ── 사이드바(NavbarNested 계승) ── */
+  /* ── 사이드바 ── */
   .navbar{width:280px;flex:0 0 280px;background:var(--paper);border-right:1px solid var(--line);
     padding:16px;display:flex;flex-direction:column;height:100vh;position:sticky;top:0;overflow-y:auto}
   .nav-header{padding-bottom:16px;margin-bottom:16px;border-bottom:1px solid var(--line)}
   .nav-header img{height:22px;display:block}
-  .brandTitle{margin-top:9px;font-size:13.5px;font-weight:800;line-height:1.3;letter-spacing:-.2px;color:#1e293b}
+  .brandTitle{margin-top:9px;font-size:13.5px;font-weight:800;line-height:1.3;letter-spacing:-.2px}
   .brandSub{margin-top:2px;font-size:11.5px;font-weight:600;color:var(--muted)}
-
-  .deviceBox{display:flex;flex-direction:column;align-items:center;margin-bottom:16px;padding:10px 12px;
+  .deviceBox{display:flex;flex-direction:column;align-items:center;margin-bottom:14px;padding:10px 12px;
     border-radius:14px;border:1px solid var(--line-soft);background:var(--gray-0)}
   .deviceImg{width:100%;max-width:124px;aspect-ratio:1.08/1;background:url('/assets/sts-device.jpg') no-repeat center 47%;
     background-size:200%;border-radius:8px}
   .deviceCaption{margin-top:6px;font-size:11.5px;font-weight:700;color:#475569}
-
-  .navMain{flex:1 1 auto;min-height:60px}
-  .sectionLabel{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;
-    padding:0 8px;margin-bottom:6px}
-  .stationItem{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:var(--r-md);cursor:default;margin-bottom:4px}
+  .navMain{flex:1 1 auto;min-height:40px}
+  .sectionLabel{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;padding:0 8px;margin-bottom:6px}
+  .stationItem{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:var(--r-md);cursor:pointer;margin-bottom:4px}
   .stationItem:hover{background:var(--kw-50)}
+  .stationItem.active{background:var(--kw-50);box-shadow:inset 0 0 0 1px var(--kw-100)}
   .stationItem .sdot{width:9px;height:9px;border-radius:3px;flex:0 0 auto}
   .stationItem .sname{font-size:14px;font-weight:600;line-height:1.25}
   .stationItem .sdesc{font-size:11.5px;color:var(--muted);margin-top:2px}
   .stationItem .sval{margin-left:auto;font-size:13px;font-weight:700;text-align:right}
   .stationItem .sval small{font-weight:600;color:var(--muted);font-size:10.5px}
-
-  .infoCard{margin-top:16px;padding:14px 14px 12px;border-radius:14px;border:1px solid var(--line-soft);background:var(--gray-0)}
+  .infoCard{margin-top:14px;padding:13px 14px 11px;border-radius:14px;border:1px solid var(--line-soft);background:var(--gray-0)}
   .legendTitle{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin-bottom:7px}
   .legendRow{display:flex;align-items:center;gap:8px;font-size:12.5px;margin-bottom:5px}
   .legendDot{width:10px;height:10px;border-radius:3px;flex:0 0 auto}
   .legendName{font-weight:700;color:#334155;min-width:30px}
   .legendVal{margin-left:auto;font-size:12px;color:var(--muted)}
-  .infoTip{margin-top:9px;font-size:11.5px;line-height:1.45;color:var(--muted)}
-
-  .nav-footer{padding-top:16px;margin-top:16px;border-top:1px solid var(--line)}
-  .acct{display:flex;align-items:center;gap:10px;padding:8px 6px}
-  .acct .avatar{width:34px;height:34px;border-radius:9px;background:var(--kw);color:#fff;display:flex;align-items:center;
-    justify-content:center;font-weight:800;font-size:14px;flex:0 0 auto}
+  .infoTip{margin-top:8px;font-size:11.5px;line-height:1.45;color:var(--muted)}
+  .bottomNav{padding-top:14px;margin-top:14px;border-top:1px solid var(--line)}
+  .navlink{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:var(--r-md);font-size:15px;font-weight:600;
+    color:#334155;cursor:pointer;margin-bottom:4px}
+  .navlink:hover{background:var(--gray-0)}
+  .navlink.active{background:var(--kw-50);color:var(--kw)}
+  .navlink .ico{width:20px;text-align:center;font-size:17px}
+  .nav-footer{padding-top:14px;margin-top:14px;border-top:1px solid var(--line)}
+  .acct{display:flex;align-items:center;gap:10px;padding:6px}
+  .acct .avatar{width:34px;height:34px;border-radius:9px;background:var(--kw);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px}
   .acct .who{font-size:13px;font-weight:700;line-height:1.2}
   .acct .who small{display:block;font-weight:500;color:var(--muted);font-size:11px;margin-top:2px}
 
@@ -73,29 +70,44 @@
   .main{flex:1 1 auto;padding:22px;min-width:0}
   .container{max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
   .paper{background:var(--paper);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow-card)}
-
-  .contextBar{padding:16px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-  .contextBar h1{font-size:18px;font-weight:800;margin:0;letter-spacing:-.3px}
-  .contextBar .csub{font-size:12.5px;color:var(--muted)}
+  .ctxBar{padding:14px 18px;display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}
+  .ctxBar h1{font-size:18px;font-weight:800;margin:0;letter-spacing:-.3px}
+  .ctxBar .csub{font-size:12.5px;color:var(--muted);margin-top:3px}
+  .field{display:flex;flex-direction:column;gap:5px}
+  .field label{font-size:12.5px;font-weight:600;color:#334155}
+  select,.btn{font-family:var(--font);font-size:13.5px;height:36px;border:1px solid var(--line);border-radius:var(--r-md);
+    background:var(--paper);color:var(--text);padding:0 12px;cursor:pointer}
+  select:focus,.btn:focus{outline:none;border-color:var(--kw);box-shadow:0 0 0 3px var(--kw-50)}
+  .btn{display:inline-flex;align-items:center;gap:7px;font-weight:600}
+  .btn.primary{background:var(--kw);color:#fff;border-color:var(--kw)}
+  .btn.light{background:var(--kw-50);color:var(--kw);border-color:var(--kw-100)}
   .badge{font-size:11.5px;font-weight:700;padding:4px 11px;border-radius:999px;background:var(--kw-50);color:var(--kw);border:1px solid var(--kw-100)}
   .status{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)}
   .dot{width:9px;height:9px;border-radius:50%;background:#cbd5e1}
   .dot.on{background:#22c55e;animation:pulse 2s infinite}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.5)}70%{box-shadow:0 0 0 7px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
 
+  .sectionTitle{font-size:14px;font-weight:800;margin:2px 0 0;display:flex;align-items:center;gap:8px}
+  .sectionSub{font-size:11.5px;color:var(--muted);font-weight:500}
+  .kpiGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .kpi{padding:16px 18px}
+  .kpi .klabel{font-size:13px;font-weight:600;color:#475569;display:flex;justify-content:space-between;align-items:flex-start}
+  .kpi .kbadge{font-size:11px;font-weight:700;color:#fff;padding:2px 9px;border-radius:6px}
+  .kpi .kval{font-size:32px;font-weight:800;line-height:1.1;margin-top:14px;letter-spacing:-1px}
+  .kpi .kval small{font-size:15px;font-weight:700;color:var(--muted);letter-spacing:0}
+  .kpi .ksub{font-size:11.5px;color:var(--muted);margin-top:7px;min-height:15px}
+
   .layout{display:grid;grid-template-columns:1fr 320px;gap:16px;align-items:start}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;align-content:start}
-
-  .card{position:relative;overflow:hidden;padding:16px 16px 14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+  .card{position:relative;overflow:hidden;padding:15px 16px 13px}
   .card .bar{position:absolute;left:0;top:0;bottom:0;width:5px}
-  .card .cname{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:7px;font-weight:600}
+  .card .cname{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:7px;font-weight:600}
   .kind{font-size:10px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted);font-weight:600}
-  .feels{font-size:44px;font-weight:800;line-height:1.1;margin:8px 0 4px;letter-spacing:-1px}
-  .feels small{font-size:15px;font-weight:600;color:var(--muted);letter-spacing:0}
-  .level{display:inline-block;font-size:12px;font-weight:700;padding:3px 11px;border-radius:999px;color:#fff}
-  .meta{display:flex;gap:14px;margin-top:11px;font-size:12.5px;color:var(--muted)}
-  .spark{margin-top:12px;height:44px;width:100%}
-
+  .feels{font-size:40px;font-weight:800;line-height:1.1;margin:7px 0 4px;letter-spacing:-1px}
+  .feels small{font-size:14px;font-weight:600;color:var(--muted);letter-spacing:0}
+  .level{display:inline-block;font-size:11.5px;font-weight:700;padding:3px 11px;border-radius:999px;color:#fff}
+  .meta{display:flex;gap:13px;margin-top:10px;font-size:12px;color:var(--muted)}
+  .spark{margin-top:11px;height:40px;width:100%}
   aside.alerts{padding:16px;height:fit-content;position:sticky;top:22px}
   aside.alerts h2{font-size:12px;margin:0 0 11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:800}
   .alert{border-left:3px solid var(--danger);background:var(--gray-0);border-radius:9px;padding:10px 12px;margin-bottom:9px}
@@ -104,71 +116,73 @@
   .alert .t{color:var(--muted);font-size:11px;white-space:nowrap}
   .alert .act{color:#475569;line-height:1.45;font-size:11.5px}
   .empty{color:var(--muted);font-size:12.5px;padding:10px 2px}
+  .panel{padding:16px 18px}
+  .chartWrap{height:280px;position:relative;margin-top:12px}
 
-  @media (max-width:1000px){ .layout{grid-template-columns:1fr} aside.alerts{position:static} }
-  @media (max-width:760px){
-    .navbar{display:none}
-    .main{padding:14px}
+  /* ── 리포트 ── */
+  .report{padding:26px 30px}
+  .rHead{text-align:center;border-bottom:2px solid var(--kw);padding-bottom:16px;margin-bottom:18px}
+  .rHead h1{font-size:23px;font-weight:800;margin:0;letter-spacing:-.5px;color:var(--kw)}
+  .rHead .rmeta{font-size:12.5px;color:var(--muted);margin-top:8px;display:flex;justify-content:center;gap:16px;flex-wrap:wrap}
+  .rSection{margin-bottom:22px}
+  .rSection h2{font-size:15px;font-weight:800;margin:0 0 11px;padding-left:10px;border-left:4px solid var(--kw)}
+  .rGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .rStat{background:var(--gray-0);border:1px solid var(--line-soft);border-radius:var(--r-md);padding:13px 15px}
+  .rStat .l{font-size:12px;color:var(--muted);font-weight:600}
+  .rStat .v{font-size:23px;font-weight:800;margin-top:6px;letter-spacing:-.5px}
+  table.exp{width:100%;border-collapse:collapse;font-size:13px}
+  table.exp th,table.exp td{padding:9px 12px;border:1px solid var(--line-soft);text-align:center}
+  table.exp th{background:var(--gray-0);font-weight:700;color:#334155}
+  table.exp td.lvl{font-weight:800;color:#fff}
+  .restNote{margin-top:11px;padding:12px 14px;background:#fef3c7;border:1px solid #fde68a;border-radius:var(--r-md);font-size:12.5px;color:#92400e;line-height:1.5}
+  .hourGrid{display:grid;grid-template-columns:repeat(12,1fr);gap:4px;margin-top:6px}
+  .hourCell{text-align:center;font-size:10px;color:var(--muted)}
+  .hourBar{height:34px;border-radius:5px;display:flex;align-items:flex-end;justify-content:center;color:#fff;font-size:9.5px;font-weight:700;padding-bottom:2px}
+  .guide{list-style:none;padding:0;margin:0}
+  .guide li{position:relative;padding:9px 12px 9px 30px;background:var(--gray-0);border-radius:var(--r-md);margin-bottom:7px;font-size:12.5px;line-height:1.5;color:#334155}
+  .guide li::before{content:"✓";position:absolute;left:12px;top:9px;color:var(--kw);font-weight:800}
+
+  @media (max-width:1000px){ .layout{grid-template-columns:1fr} aside.alerts{position:static} .kpiGrid{grid-template-columns:repeat(2,1fr)} .rGrid{grid-template-columns:repeat(2,1fr)} }
+  @media (max-width:760px){ .navbar{display:none} .main{padding:14px} .hourGrid{grid-template-columns:repeat(6,1fr)} }
+
+  @media print{
+    .navbar,.ctxBar .field,.ctxBar .btn,.status,.printHide{display:none!important}
+    .main{padding:0} .paper{box-shadow:none;border:none} .report{padding:0}
+    body{background:#fff}
   }
 </style>
 </head>
 <body>
 <div class="shell">
-  <!-- ── 사이드바 (STS NavbarNested 디자인) ── -->
   <aside class="navbar">
     <div class="nav-header">
       <img src="/assets/kweather-logo.png" alt="KWEATHER" />
       <div class="brandTitle">실시간 폭염대응 솔루션</div>
       <div class="brandSub">IoT 체감온도 · 실시간 위험감지</div>
     </div>
-
     <div class="deviceBox">
       <div class="deviceImg" role="img" aria-label="케이웨더 체감온도계 STS 장비"></div>
       <div class="deviceCaption">케이웨더 IoT 센서 · 실시간</div>
     </div>
-
     <div class="navMain">
       <div class="sectionLabel">측정기</div>
       <div id="stationList"><div class="empty" style="padding:8px">측정기 연결 대기 중…</div></div>
     </div>
-
     <div class="infoCard">
       <div class="legendTitle">폭염 위험단계 (체감온도)</div>
       <div id="legend"></div>
       <div class="infoTip">체감 33℃↑ 작업 시 2시간마다 20분 휴식은 법적 의무입니다.</div>
     </div>
-
+    <div class="bottomNav">
+      <div class="navlink active" id="nav-dash"><span class="ico">▦</span>대시보드</div>
+      <div class="navlink" id="nav-report"><span class="ico">▤</span>리포트</div>
+    </div>
     <div class="nav-footer">
-      <div class="acct">
-        <div class="avatar">HG</div>
-        <div class="who">HeatGuard<small>실시간 데모</small></div>
-      </div>
+      <div class="acct"><div class="avatar">HG</div><div class="who">HeatGuard<small>실시간 데모</small></div></div>
     </div>
   </aside>
 
-  <!-- ── 메인 ── -->
-  <main class="main">
-    <div class="container">
-      <div class="paper contextBar">
-        <div>
-          <h1>실시간 현황</h1>
-          <div class="csub">사업장·기기별 체감온도 실시간 모니터링 및 폭염 위험감지</div>
-        </div>
-        <span class="badge" id="modeBadge">실시간</span>
-        <div class="status"><span class="dot" id="dot"></span><span id="conn">연결 중…</span></div>
-      </div>
-
-      <div class="layout">
-        <main>
-          <div class="grid" id="grid"></div>
-        </main>
-        <aside class="alerts paper">
-          <h2>경보 피드</h2>
-          <div id="alerts"><div class="empty">아직 경보가 없습니다.</div></div>
-        </aside>
-      </div>
-    </div>
-  </main>
+  <main class="main"><div class="container" id="view"></div></main>
 </div>
 
 <script>
@@ -176,114 +190,258 @@ const LV = {
   safe:{label:"안전",color:"#16a34a"}, attention:{label:"관심",color:"#84cc16"},
   caution:{label:"주의",color:"#eab308"}, warning:{label:"경고",color:"#f97316"}, danger:{label:"위험",color:"#dc2626"},
 };
-let THRESH = {attention:31,caution:33,warning:35,danger:38};
+const ORDER=["attention","caution","warning","danger"];
+let THRESH={attention:31,caution:33,warning:35,danger:38};
+const state={view:"dash", sn:"", date:null, devices:[], mode:"", live:null};
+const view=document.getElementById("view");
+let tsChart=null, weekChart=null;
 
-const grid = document.getElementById("grid");
-const alertsEl = document.getElementById("alerts");
-const stationListEl = document.getElementById("stationList");
-const dot = document.getElementById("dot");
-const conn = document.getElementById("conn");
-const modeBadge = document.getElementById("modeBadge");
+const api=(p)=>fetch(p,{cache:"no-store"}).then(r=>r.json());
+const fmtMin=(m)=>{ if(!m||m<=0)return"0분"; const h=Math.floor(m/60),x=m%60; return h>0?`${h}시간 ${x}분`:`${x}분`; };
 
-fetch("/api/thresholds").then(r=>r.json()).then(d=>{ THRESH=d.thresholds; renderLegend(); }).catch(()=>{});
-fetch("/api/health").then(r=>r.json()).then(d=>{ modeBadge.textContent = d.mode==="mock" ? "실시간 데모" : "케이웨더 IoT"; }).catch(()=>{});
+/* ── 부팅 ── */
+Promise.all([api("/api/thresholds").catch(()=>({})), api("/api/health").catch(()=>({})), api("/api/devices").catch(()=>({devices:[]})), api("/api/dates").catch(()=>({dates:[]}))])
+.then(([th,h,dv,dt])=>{
+  if(th.thresholds) THRESH=th.thresholds;
+  state.mode = h.mode==="mock" ? "실시간 데모" : (h.mode?"케이웨더 IoT":"");
+  state.devices = dv.devices||[];
+  state.dates = dt.dates||[];
+  state.date = (dt.dates&&dt.dates[0])||null;
+  renderLegend();
+  render();
+  connect();
+});
+
+document.getElementById("nav-dash").onclick=()=>{ state.view="dash"; setNav(); render(); };
+document.getElementById("nav-report").onclick=()=>{ state.view="report"; setNav(); render(); };
+function setNav(){ document.getElementById("nav-dash").classList.toggle("active",state.view==="dash");
+  document.getElementById("nav-report").classList.toggle("active",state.view==="report"); }
 
 function renderLegend(){
-  document.getElementById("legend").innerHTML = ["attention","caution","warning","danger"].map(k=>{
-    const v=LV[k]; return `<div class="legendRow"><span class="legendDot" style="background:${v.color}"></span>`+
-      `<span class="legendName">${v.label}</span><span class="legendVal">${THRESH[k]}℃ 이상</span></div>`;
-  }).join("");
+  document.getElementById("legend").innerHTML = ORDER.map(k=>{const v=LV[k];
+    return `<div class="legendRow"><span class="legendDot" style="background:${v.color}"></span><span class="legendName">${v.label}</span><span class="legendVal">${THRESH[k]}℃ 이상</span></div>`;}).join("");
 }
-renderLegend();
+
+/* ── 라우터 ── */
+function render(){ if(state.view==="report") renderReport(); else renderDash(); }
+
+/* ── 대시보드 ── */
+function renderDash(){
+  view.innerHTML = `
+    <div class="paper ctxBar">
+      <div><h1>실시간 현황</h1><div class="csub">사업장·기기별 체감온도 실시간 모니터링 및 폭염 위험감지</div></div>
+      <div class="field"><label>측정기</label>${deviceSelect("dashSn")}</div>
+      <span class="badge" id="modeBadge">${state.mode||"실시간"}</span>
+      <div class="status"><span class="dot" id="dot"></span><span id="conn">연결 중…</span></div>
+    </div>
+    <div class="kpiGrid" id="kpiGrid"></div>
+    <div class="sectionTitle">실시간 측정 현황 <span class="sectionSub">기기별 현재 체감온도</span></div>
+    <div class="layout">
+      <div class="grid" id="grid"></div>
+      <aside class="alerts paper"><h2>경보 피드</h2><div id="alerts"><div class="empty">아직 경보가 없습니다.</div></div></aside>
+    </div>
+    <div class="paper panel">
+      <div class="sectionTitle">데이터 분석 <span class="sectionSub">오늘 시간대별 체감온도 추이</span></div>
+      <div class="chartWrap"><canvas id="tsChart"></canvas></div>
+    </div>
+    <div class="paper panel">
+      <div class="sectionTitle">최근 7일 체감온도 <span class="sectionSub">일 최고(막대)·일 평균(선)·위험단계 임계</span></div>
+      <div class="chartWrap"><canvas id="weekChart"></canvas></div>
+    </div>`;
+  document.getElementById("dashSn").value=state.sn;
+  document.getElementById("dashSn").onchange=(e)=>{ state.sn=e.target.value; loadKpi(); loadTs(); loadWeek(); };
+  tsChart=weekChart=null;
+  if(state.live){ renderGrid(state.live); renderAlerts(state.live.alerts||[]); }
+  loadKpi(); loadTs(); loadWeek();
+}
+
+function deviceSelect(id){
+  const opts=[`<option value="">전체 사업장</option>`].concat(state.devices.map(d=>
+    `<option value="${d.device_sn}">${d.location_name} · ${d.device_sn}</option>`));
+  return `<select id="${id}">${opts.join("")}</select>`;
+}
+
+function kpiCard(label,val,unit,stage,sub){
+  const c=stage?stage.color:"#334155";
+  return `<div class="paper kpi"><div class="klabel">${label}${stage?`<span class="kbadge" style="background:${c}">${stage.label}</span>`:""}</div>
+    <div class="kval" style="color:${c}">${val}${unit?`<small> ${unit}</small>`:""}</div><div class="ksub">${sub||""}</div></div>`;
+}
+function loadKpi(){
+  const g=document.getElementById("kpiGrid"); if(!g)return;
+  api(`/api/kpi${state.sn?`?sn=${state.sn}`:""}`).then(k=>{
+    const lv=k.current_level||LV.safe;
+    g.innerHTML=[
+      kpiCard("최고 체감온도", k.max_feels_like??"–", "℃", lv, k.max_feels_like_time?`${k.max_feels_like_time} 기록`:""),
+      kpiCard("위험 노출시간", k.danger_minutes_label||"0분", "", {label:"위험",color:LV.danger.color}, "체감 38℃ 이상 누적"),
+      kpiCard("평균 체감온도", k.avg_feels_like??"–", "℃", null, "오늘 평균"),
+      kpiCard("최고 기온", k.max_temperature??"–", "℃", null, k.avg_humidity!=null?`평균 습도 ${k.avg_humidity}%`:""),
+    ].join("");
+  }).catch(()=>{});
+}
+
+function thresholdSets(){
+  return [["danger",LV.danger.color],["warning",LV.warning.color],["caution",LV.caution.color]].map(([k,c])=>({
+    label:`${LV[k].label} ${THRESH[k]}℃`, data:null, _thr:THRESH[k], borderColor:c, borderWidth:1, borderDash:[5,4],
+    pointRadius:0, fill:false,
+  }));
+}
+function loadTs(){
+  const sn=state.sn||(state.devices[0]&&state.devices[0].device_sn); if(!sn||typeof Chart==="undefined")return;
+  api(`/api/timeseries?sn=${sn}&interval=30`).then(d=>{
+    const labels=d.points.map(p=>p.at.slice(11,16));
+    const feels=d.points.map(p=>p.feels_like);
+    const thr=thresholdSets().map(s=>({...s,data:labels.map(()=>s._thr)}));
+    const cfg={type:"line",data:{labels,datasets:[
+      {label:"체감온도",data:feels,borderColor:"#0f499e",backgroundColor:"rgba(15,73,158,.08)",borderWidth:2.4,fill:true,tension:.3,pointRadius:0},
+      ...thr]},
+      options:{responsive:true,maintainAspectRatio:false,interaction:{mode:"index",intersect:false},
+        plugins:{legend:{display:true,labels:{boxWidth:14,font:{size:11}}},tooltip:{callbacks:{label:(c)=>c.dataset.label==="체감온도"?` 체감 ${c.parsed.y}℃`:null}}},
+        scales:{y:{title:{display:true,text:"체감온도(℃)"},grid:{color:"#eef1f5"}},x:{ticks:{maxTicksLimit:12,font:{size:10}},grid:{display:false}}}}};
+    if(tsChart)tsChart.destroy(); const el=document.getElementById("tsChart"); if(el)tsChart=new Chart(el,cfg);
+  }).catch(()=>{});
+}
+function loadWeek(){
+  const sn=state.sn||(state.devices[0]&&state.devices[0].device_sn); if(!sn||typeof Chart==="undefined")return;
+  api(`/api/weekly?sn=${sn}`).then(d=>{
+    const labels=d.days.map(x=>x.date.slice(5));
+    const cfg={type:"bar",data:{labels,datasets:[
+      {type:"bar",label:"일 최고 체감",data:d.days.map(x=>x.max_feels),backgroundColor:d.days.map(x=>LV[x.peak_level].color),borderRadius:5,order:2},
+      {type:"line",label:"일 평균 체감",data:d.days.map(x=>x.avg_feels),borderColor:"#1e293b",borderWidth:2,pointRadius:3,pointBackgroundColor:"#1e293b",tension:.3,order:1},
+    ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{boxWidth:14,font:{size:11}}},
+      tooltip:{callbacks:{afterBody:(items)=>{const x=d.days[items[0].dataIndex];return ` 단계: ${LV[x.peak_level].label} · 최고기온 ${x.max_temp}℃`;}}}},
+      scales:{y:{title:{display:true,text:"체감온도(℃)"},grid:{color:"#eef1f5"},suggestedMin:24},x:{grid:{display:false}}}}};
+    if(weekChart)weekChart.destroy(); const el=document.getElementById("weekChart"); if(el)weekChart=new Chart(el,cfg);
+  }).catch(()=>{});
+}
 
 function sparkline(history){
-  const pts = history.filter(p=>p.feels_like!=null).slice(-40);
-  if(pts.length<2) return "";
-  const w=210,h=44,vals=pts.map(p=>p.feels_like);
-  const min=Math.min(...vals,30),max=Math.max(...vals,40);
-  const x=i=>i/(pts.length-1)*w, y=v=>h-((v-min)/(max-min||1))*h;
+  const pts=(history||[]).filter(p=>p.feels_like!=null).slice(-40); if(pts.length<2)return"";
+  const w=210,h=40,vals=pts.map(p=>p.feels_like),min=Math.min(...vals,30),max=Math.max(...vals,40);
+  const x=i=>i/(pts.length-1)*w,y=v=>h-((v-min)/(max-min||1))*h;
   const d=pts.map((p,i)=>`${i?"L":"M"}${x(i).toFixed(1)},${y(p.feels_like).toFixed(1)}`).join(" ");
-  const last=pts[pts.length-1], yl=v=>y(v).toFixed(1);
-  let lines="";
+  const last=pts[pts.length-1],yl=v=>y(v).toFixed(1); let lines="";
   [["danger",THRESH.danger],["warning",THRESH.warning],["caution",THRESH.caution]].forEach(([k,t])=>{
-    if(t>=min&&t<=max) lines+=`<line x1="0" x2="${w}" y1="${yl(t)}" y2="${yl(t)}" stroke="${LV[k].color}" stroke-opacity=".45" stroke-dasharray="2 3" stroke-width="1"/>`;
-  });
-  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">${lines}
-    <path d="${d}" fill="none" stroke="${LV[last.level].color}" stroke-width="2"/></svg>`;
+    if(t>=min&&t<=max)lines+=`<line x1="0" x2="${w}" y1="${yl(t)}" y2="${yl(t)}" stroke="${LV[k].color}" stroke-opacity=".45" stroke-dasharray="2 3" stroke-width="1"/>`;});
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">${lines}<path d="${d}" fill="none" stroke="${LV[last.level].color}" stroke-width="2"/></svg>`;
 }
-
 function card(st){
-  const lt = st.latest || {}, lv = LV[lt.level||"safe"];
-  return `<div class="paper card">
-    <div class="bar" style="background:${lv.color}"></div>
+  const lt=st.latest||{},lv=LV[lt.level||"safe"];
+  return `<div class="paper card"><div class="bar" style="background:${lv.color}"></div>
     <div class="cname">${st.name} <span class="kind">${st.kind==="indoor"?"실내":"옥외"}</span></div>
     <div class="feels" style="color:${lv.color}">${lt.feels_like??"–"}<small> ℃ 체감</small></div>
     <span class="level" style="background:${lv.color}">${lv.label}</span>
     <div class="meta"><span>🌡 ${lt.temperature??"–"}℃</span><span>💧 ${lt.humidity??"–"}%</span></div>
-    ${sparkline(st.history||[])}
-  </div>`;
+    ${sparkline(st.history)}</div>`;
 }
-
-function renderSidebar(sts){
-  stationListEl.innerHTML = sts.length ? sts.map(st=>{
-    const lt=st.latest||{}, lv=LV[lt.level||"safe"];
-    return `<div class="stationItem">
-      <span class="sdot" style="background:${lv.color}"></span>
-      <div><div class="sname">${st.name}</div><div class="sdesc">${st.kind==="indoor"?"실내":"옥외"} · ${st.sn}</div></div>
-      <div class="sval" style="color:${lv.color}">${lt.feels_like??"–"}<small> ℃</small></div>
-    </div>`;
-  }).join("") : `<div class="empty" style="padding:8px">측정기 연결 대기 중…</div>`;
-}
-
-function render(snap){
+function renderGrid(snap){
+  const g=document.getElementById("grid"); if(!g)return;
   const sts=(snap.stations||[]).sort((a,b)=>(b.latest?.feels_like||0)-(a.latest?.feels_like||0));
-  grid.innerHTML = sts.length ? sts.map(card).join("") : `<div class="empty">측정값 수신 대기 중…</div>`;
-  renderSidebar(sts);
-  if(snap.alerts) renderAlerts(snap.alerts);
+  g.innerHTML=sts.length?sts.map(card).join(""):`<div class="empty">측정값 수신 대기 중…</div>`;
 }
-
 function renderAlerts(list){
-  if(!list.length){ alertsEl.innerHTML=`<div class="empty">아직 경보가 없습니다.</div>`; return; }
-  alertsEl.innerHTML = list.slice(0,30).map(a=>{
-    const lv=LV[a.level], t=new Date(a.at).toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
-    return `<div class="alert" style="border-color:${lv.color}">
-      <div class="top"><span class="lv" style="color:${lv.color}">[${a.level_label}] ${a.name}</span><span class="t">${t}</span></div>
-      <div class="act">체감 ${a.feels_like}℃ · ${a.action}</div></div>`;
-  }).join("");
+  const el=document.getElementById("alerts"); if(!el)return;
+  if(!list.length){el.innerHTML=`<div class="empty">아직 경보가 없습니다.</div>`;return;}
+  el.innerHTML=list.slice(0,30).map(a=>{const lv=LV[a.level],t=new Date(a.at).toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+    return `<div class="alert" style="border-color:${lv.color}"><div class="top"><span class="lv" style="color:${lv.color}">[${a.level_label}] ${a.name}</span><span class="t">${t}</span></div><div class="act">체감 ${a.feels_like}℃ · ${a.action}</div></div>`;}).join("");
+}
+function renderSidebar(sts){
+  const el=document.getElementById("stationList"); if(!el)return;
+  el.innerHTML=sts.length?sts.map(st=>{const lt=st.latest||{},lv=LV[lt.level||"safe"],act=state.sn===st.sn?" active":"";
+    return `<div class="stationItem${act}" data-sn="${st.sn}"><span class="sdot" style="background:${lv.color}"></span>
+      <div><div class="sname">${st.name}</div><div class="sdesc">${st.kind==="indoor"?"실내":"옥외"} · ${st.sn}</div></div>
+      <div class="sval" style="color:${lv.color}">${lt.feels_like??"–"}<small> ℃</small></div></div>`;}).join("")
+    :`<div class="empty" style="padding:8px">측정기 연결 대기 중…</div>`;
+  el.querySelectorAll(".stationItem").forEach(n=>n.onclick=()=>{ state.sn=n.dataset.sn; state.view="dash"; setNav();
+    if(state.live){renderGrid(state.live);} render(); });
 }
 
-let pollTimer=null, prevAlertKey="";
+/* ── 리포트 ── */
+function renderReport(){
+  const sn=state.sn||(state.devices[0]&&state.devices[0].device_sn)||"";
+  view.innerHTML=`
+    <div class="paper ctxBar printHide">
+      <div><h1>폭염 안전관리 일일 보고서</h1><div class="csub">측정기·일자 선택 후 보고서를 확인하고 PDF로 저장할 수 있습니다</div></div>
+      <div class="field"><label>측정기</label>${deviceSelect("rptSn")}</div>
+      <div class="field"><label>분석 일자</label><select id="rptDate">${(state.dates||[]).map(d=>`<option value="${d}">${d}</option>`).join("")}</select></div>
+      <button class="btn primary" id="rptPrint">🖨 PDF 저장 / 인쇄</button>
+    </div>
+    <div class="paper report" id="reportBody"><div class="empty">불러오는 중…</div></div>`;
+  document.getElementById("rptSn").value=sn;
+  document.getElementById("rptDate").value=state.date||(state.dates&&state.dates[0]);
+  document.getElementById("rptSn").onchange=(e)=>{ state.sn=e.target.value; loadReport(); };
+  document.getElementById("rptDate").onchange=(e)=>{ state.date=e.target.value; loadReport(); };
+  document.getElementById("rptPrint").onclick=()=>window.print();
+  loadReport();
+}
+function loadReport(){
+  const sn=document.getElementById("rptSn")?.value||state.sn||(state.devices[0]&&state.devices[0].device_sn);
+  const date=document.getElementById("rptDate")?.value||state.date;
+  if(!sn)return;
+  api(`/api/report/daily?sn=${sn}&date=${date}`).then(r=>renderReportBody(r)).catch(()=>{});
+}
+function renderReportBody(r){
+  const el=document.getElementById("reportBody"); if(!el)return;
+  const pk=r.peak_level||LV.safe;
+  const gen=new Date(r.generated_at).toLocaleString("ko-KR",{dateStyle:"medium",timeStyle:"short"});
+  const expRows=(r.exposure||[]).map(e=>`<tr><td class="lvl" style="background:${e.color}">${e.label}</td>
+    <td>${e.threshold}℃ 이상</td><td style="font-weight:700">${e.label_time}</td></tr>`).join("");
+  const hours=(r.hours||[]);
+  const hourCells=hours.map(h=>`<div><div class="hourBar" style="background:${h.color}">${h.feels??""}</div><div class="hourCell">${h.hour}시</div></div>`).join("");
+  const guide=(r.guidance||[]).map(g=>`<li>${g}</li>`).join("");
+  const restWarn=(r.legal_rest_count>0)?`<div class="restNote"><b>법정 휴식 의무</b> — 근무시간(09~18시) 중 체감 33℃ 이상 작업 누적 ${r.work_hot_label}.
+    산업안전보건규칙상 <b>2시간마다 20분 이상 휴식</b> 기준으로 최소 <b>${r.legal_rest_count}회 · 총 ${r.legal_rest_minutes}분</b>의 휴식을 부여해야 합니다.</div>`:"";
+  el.innerHTML=`
+    <div class="rHead"><h1>폭염 안전관리 일일 보고서</h1>
+      <div class="rmeta"><span>측정기: ${r.location_name} (${r.device_sn})</span><span>구분: ${r.kind==="indoor"?"실내":"옥외"}</span><span>분석일자: ${r.date}</span><span>발행: ${gen}</span></div></div>
+
+    <div class="rSection"><h2>1. 측정 요약</h2>
+      <div class="rGrid">
+        <div class="rStat"><div class="l">최고 체감온도</div><div class="v" style="color:${pk.color}">${r.max_feels_like??"–"}℃</div></div>
+        <div class="rStat"><div class="l">발생 시각</div><div class="v">${r.max_feels_like_time||"–"}</div></div>
+        <div class="rStat"><div class="l">최고 기온</div><div class="v">${r.max_temperature??"–"}℃</div></div>
+        <div class="rStat"><div class="l">위험단계</div><div class="v" style="color:${pk.color}">${pk.label}</div></div>
+      </div></div>
+
+    <div class="rSection"><h2>2. 위험단계별 노출시간</h2>
+      <table class="exp"><thead><tr><th>위험단계</th><th>기준(체감)</th><th>누적 노출시간</th></tr></thead><tbody>${expRows}</tbody></table>
+      ${restWarn}</div>
+
+    <div class="rSection"><h2>3. 시간대별 체감온도</h2>
+      <div class="hourGrid">${hourCells||'<div class="empty">데이터 없음</div>'}</div></div>
+
+    <div class="rSection"><h2>4. 안전조치 가이드 <span class="sectionSub" style="font-weight:600">(고용노동부 2026 폭염 대책)</span></h2>
+      <ul class="guide">${guide}</ul></div>`;
+}
+
+/* ── 실시간 연결(WS→폴링) ── */
+let pollTimer=null,prevAlertKey="";
+function applyLive(snap){
+  state.live=snap;
+  const sts=(snap.stations||[]).slice().sort((a,b)=>(b.latest?.feels_like||0)-(a.latest?.feels_like||0));
+  renderSidebar(sts);
+  if(state.view==="dash"){ renderGrid(snap); renderAlerts(snap.alerts||[]); }
+}
+function setConn(on,txt){const d=document.getElementById("dot"),c=document.getElementById("conn");if(d)d.classList.toggle("on",on);if(c)c.textContent=txt;}
 function startPolling(){
-  if(pollTimer) return;
-  dot.classList.add("on"); conn.textContent="실시간(폴링)";
-  const tick=async()=>{
-    try{
-      const snap=await (await fetch("/api/live",{cache:"no-store"})).json();
-      render(snap);
-      const top=(snap.alerts||[])[0], key=top?`${top.sn}:${top.level}`:"";
-      if(key && key!==prevAlertKey) flashAlert();
-      prevAlertKey=key;
-    }catch(e){ dot.classList.remove("on"); conn.textContent="연결 끊김"; }
-  };
+  if(pollTimer)return; setConn(true,"실시간(폴링)");
+  const tick=async()=>{ try{ const s=await api("/api/live"); applyLive(s);
+    const top=(s.alerts||[])[0],key=top?`${top.sn}:${top.level}`:""; if(key&&key!==prevAlertKey)flashAlert(); prevAlertKey=key;
+  }catch(e){ setConn(false,"연결 끊김"); } };
   tick(); pollTimer=setInterval(tick,3000);
 }
-
 function connect(){
-  // WebSocket(sts 서버) 우선, 실패 시 폴링(Vercel 서버리스)로 자동 전환.
-  let settled=false;
-  const proto = location.protocol==="https:"?"wss":"ws";
-  let ws;
-  try{ ws = new WebSocket(`${proto}://${location.host}/ws/live`); }
-  catch(e){ return startPolling(); }
-  const fallback=setTimeout(()=>{ if(!settled){ try{ws.close();}catch(_){}{} startPolling(); } },2500);
-  ws.onopen=()=>{ settled=true; clearTimeout(fallback); dot.classList.add("on"); conn.textContent="실시간 연결됨"; };
-  ws.onmessage=e=>{ const m=JSON.parse(e.data); if(m.type==="snapshot") render(m.data); else if(m.type==="alert") flashAlert(); };
-  ws.onclose=()=>{ clearTimeout(fallback); if(!settled){ startPolling(); return; } dot.classList.remove("on"); conn.textContent="재연결 중…"; setTimeout(connect,2000); };
-  ws.onerror=()=>{ if(!settled){ clearTimeout(fallback); startPolling(); } try{ws.close();}catch(_){}{} };
-  setInterval(()=>{ if(ws && ws.readyState===1) ws.send("ping"); },25000);
+  let settled=false; const proto=location.protocol==="https:"?"wss":"ws"; let ws;
+  try{ ws=new WebSocket(`${proto}://${location.host}/ws/live`); }catch(e){ return startPolling(); }
+  const fb=setTimeout(()=>{ if(!settled){ try{ws.close();}catch(_){}{} startPolling(); } },2500);
+  ws.onopen=()=>{ settled=true; clearTimeout(fb); setConn(true,"실시간 연결됨"); };
+  ws.onmessage=e=>{ const m=JSON.parse(e.data); if(m.type==="snapshot")applyLive(m.data); else if(m.type==="alert")flashAlert(); };
+  ws.onclose=()=>{ clearTimeout(fb); if(!settled){startPolling();return;} setConn(false,"재연결 중…"); setTimeout(connect,2000); };
+  ws.onerror=()=>{ if(!settled){clearTimeout(fb);startPolling();} try{ws.close();}catch(_){}{} };
+  setInterval(()=>{ if(ws&&ws.readyState===1)ws.send("ping"); },25000);
 }
+// KPI/차트 주기 갱신(대시보드)
+setInterval(()=>{ if(state.view==="dash"){ loadKpi(); loadTs(); } },30000);
 function flashAlert(){ document.title="🚨 폭염경보! · HeatGuard"; setTimeout(()=>document.title="HeatGuard · 실시간 폭염대응",4000); }
-connect();
 </script>
 </body>
 </html>

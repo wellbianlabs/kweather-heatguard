@@ -28,7 +28,7 @@ def _apparent_temp(t: float | None, rh: float | None) -> float | None:
 async def fetch_last_all() -> list[dict]:
     """케이웨더 IoT last-all 실시간 측정값."""
     if settings.USE_MOCK or not (settings.KW_IOT_API_KEY and settings.KW_IOT_USER_ID):
-        return mock.last_all_at(datetime.now())
+        return mock.last_all_at(mock.now_kst())
 
     url = f"{settings.KW_IOT_BASE_URL}/last-all"
     params = {

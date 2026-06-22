@@ -8,7 +8,7 @@ Vercel 서버리스는 백그라운드 워커·인메모리 상태를 유지할 
 from __future__ import annotations
 
 import math
-from datetime import datetime, timedelta
+from datetime import date as date_cls, datetime, timedelta
 
 from .heat import LEVELS, classify
 
@@ -21,6 +21,11 @@ STATIONS = [
 ]
 
 _PERIOD_SEC = 150.0  # 한 주기(≈2.5분)마다 위험단계가 오르내림
+
+
+def now_kst() -> datetime:
+    """데모 기준 현재시각(KST). Vercel=UTC 환경에서도 한국 일과시간 곡선이 맞도록 보정."""
+    return datetime.utcnow() + timedelta(hours=9)
 
 
 def _feels_at(st: dict, ts: float) -> float:
@@ -82,3 +87,84 @@ def snapshot_at(now: datetime) -> dict:
             })
     alerts.sort(key=lambda a: a["feels_like"], reverse=True)
     return {"stations": stations, "alerts": alerts, "ts": now.isoformat()}
+
+
+# ── 일별/주간 시계열(리포트·차트용) ─────────────────────────────────────────
+# 일중 변화(diurnal)를 가진 결정적 시계열. day_mean=일 평균 체감, day_amp=진폭(새벽↓/오후↓).
+# 밀폐형 실내는 진폭이 작아 야간에도 더움. 전부 시각의 순수 함수(난수 없음).
+DAY_PARAMS = {
+    "HG-OUT-001": {"mean": 33.5, "amp": 5.2},   # 옥외작업장 — 오후 위험단계 진입
+    "HG-OUT-002": {"mean": 31.2, "amp": 4.6},   # 자재야적장 — 오후 경고
+    "HG-IN-001": {"mean": 34.2, "amp": 2.6},    # 용해로(밀폐) — 야간도 주의↑ 유지
+    "HG-IN-002": {"mean": 25.2, "amp": 2.0},    # 사무동 휴게실 — 안전권
+}
+
+
+def station_by_sn(sn: str) -> dict | None:
+    for st in STATIONS:
+        if st["sn"] == sn:
+            return st
+    return None
+
+
+def _diurnal(hour_f: float) -> float:
+    # 14시 부근 최고, 새벽 최저 (sin 위상 8시 → 피크 14시)
+    return math.sin((hour_f - 8.0) / 24.0 * 2 * math.pi)
+
+
+def _date_offset(d: date_cls) -> float:
+    # 날짜별 결정적 가감(폭염 강도 변동) — 주간 위젯에 일별 차이를 만든다.
+    return ((d.day * 7 + d.month * 3) % 6) - 2.0
+
+
+def day_series(sn: str, on: date_cls, step_min: int = 10) -> list[dict]:
+    """해당 기기·날짜의 10분 간격 측정 시계열(결정적 합성)."""
+    st = station_by_sn(sn)
+    if st is None:
+        return []
+    p = DAY_PARAMS.get(sn, {"mean": 30.0, "amp": 4.0})
+    off = _date_offset(on)
+    out: list[dict] = []
+    steps = (24 * 60) // step_min
+    for i in range(steps):
+        when = datetime(on.year, on.month, on.day) + timedelta(minutes=i * step_min)
+        hour_f = when.hour + when.minute / 60.0
+        wiggle = 0.35 * math.sin(hour_f * 1.7 + st["phase"])
+        feels = round(p["mean"] + p["amp"] * _diurnal(hour_f) + off + wiggle, 1)
+        humi = round(max(35.0, min(88.0, 62.0 - (feels - 33.0) * 2)))
+        temp = round(feels - 1.4, 1)
+        out.append({
+            "at": when.isoformat(), "feels_like": feels, "temperature": temp,
+            "humidity": humi, "level": classify(feels).code,
+        })
+    return out
+
+
+def today_series(sn: str, now: datetime, step_min: int = 10) -> list[dict]:
+    """오늘 00:00~현재까지의 시계열(대시보드 분석용)."""
+    full = day_series(sn, now.date(), step_min)
+    cutoff = now.isoformat()
+    return [p for p in full if p["at"] <= cutoff]
+
+
+def recent_days(sn: str, end: date_cls, days: int = 7) -> list[dict]:
+    """최근 N일 일별 집계(최고/평균 체감, 최고 기온) — 주간 위젯용."""
+    rows: list[dict] = []
+    for k in range(days - 1, -1, -1):
+        d = end - timedelta(days=k)
+        series = day_series(sn, d)
+        feels = [p["feels_like"] for p in series]
+        temps = [p["temperature"] for p in series]
+        mx = max(feels)
+        rows.append({
+            "date": d.isoformat(),
+            "max_feels": round(mx, 1),
+            "avg_feels": round(sum(feels) / len(feels), 1),
+            "max_temp": round(max(temps), 1),
+            "peak_level": classify(mx).code,
+        })
+    return rows
+
+
+def available_dates(end: date_cls, days: int = 14) -> list[str]:
+    return [(end - timedelta(days=k)).isoformat() for k in range(days)]

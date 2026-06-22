@@ -81,13 +81,116 @@ async def live() -> dict:
         return snap
     if settings.USE_MOCK or not settings.KW_IOT_API_KEY:
         from . import mock
-        return mock.snapshot_at(datetime.now())
+        return mock.snapshot_at(mock.now_kst())
     # 실계정·무워커: last-all 1회 조회로 현재값만(히스토리 없음)
     from .kw_iot import fetch_last_all
     readings = await fetch_last_all()
     for r in readings:
         store.ingest(r)
     return store.snapshot()
+
+
+# ── 분석/리포트 API (STS 대시보드·리포트 기능 계승, 데모는 mock 시계열 기반) ──
+from datetime import date as _date  # noqa: E402
+
+from . import analytics, mock  # noqa: E402
+
+
+def _parse_date(s: str | None) -> _date:
+    if s:
+        try:
+            return _date.fromisoformat(s)
+        except Exception:  # noqa: BLE001
+            pass
+    return mock.now_kst().date()
+
+
+def _points_for(sn: str | None, on: _date, today: bool) -> list[dict]:
+    """선택 기기·일자의 시계열. sn 없으면 전체 기기 합산(KPI용)."""
+    sns = [sn] if sn else [s["sn"] for s in mock.STATIONS]
+    pts: list[dict] = []
+    now = mock.now_kst()
+    for s in sns:
+        pts += (mock.today_series(s, now) if today else mock.day_series(s, on))
+    return pts
+
+
+def _downsample(points: list[dict], interval: int) -> list[dict]:
+    """interval(분) 버킷 평균 — STS time_series 다운샘플 대응."""
+    if interval <= 10:
+        return points
+    buckets: dict[str, list[dict]] = {}
+    for p in points:
+        try:
+            t = datetime.fromisoformat(p["at"])
+        except Exception:  # noqa: BLE001
+            continue
+        b = t.replace(minute=(t.minute // interval) * interval, second=0, microsecond=0)
+        buckets.setdefault(b.isoformat(), []).append(p)
+    out = []
+    for key in sorted(buckets):
+        g = buckets[key]
+        gf = [x["feels_like"] for x in g if x.get("feels_like") is not None]
+        gt = [x["temperature"] for x in g if x.get("temperature") is not None]
+        out.append({
+            "at": key,
+            "feels_like": round(sum(gf) / len(gf), 1) if gf else None,
+            "temperature": round(sum(gt) / len(gt), 1) if gt else None,
+        })
+    return out
+
+
+@app.get("/api/devices")
+def devices() -> dict:
+    return {"devices": [
+        {"device_sn": s["sn"], "location_name": s["name"], "kind": s["kind"]}
+        for s in mock.STATIONS
+    ]}
+
+
+@app.get("/api/dates")
+def dates() -> dict:
+    today = mock.now_kst().date()
+    return {"dates": mock.available_dates(today, 14), "max_date": today.isoformat()}
+
+
+@app.get("/api/kpi")
+def kpi(sn: str | None = None, date: str | None = None) -> dict:
+    on = _parse_date(date)
+    is_today = on == mock.now_kst().date()
+    pts = _points_for(sn, on, is_today)
+    return {"device_sn": sn, "date": on.isoformat(), **analytics.kpi_from_points(pts)}
+
+
+@app.get("/api/timeseries")
+def timeseries(sn: str, date: str | None = None, interval: int = 10) -> dict:
+    on = _parse_date(date)
+    is_today = on == mock.now_kst().date()
+    pts = _points_for(sn, on, is_today)
+    return {"device_sn": sn, "date": on.isoformat(), "interval_minutes": interval,
+            "points": _downsample(pts, interval)}
+
+
+@app.get("/api/weekly")
+def weekly(sn: str | None = None) -> dict:
+    target = sn or mock.STATIONS[0]["sn"]
+    return {"device_sn": target, "days": mock.recent_days(target, mock.now_kst().date(), 7)}
+
+
+@app.get("/api/report/daily")
+def report_daily(sn: str, date: str | None = None) -> dict:
+    on = _parse_date(date)
+    st = mock.station_by_sn(sn)
+    is_today = on == mock.now_kst().date()
+    pts = mock.today_series(sn, mock.now_kst()) if is_today else mock.day_series(sn, on)
+    data = analytics.daily_from_points(pts)
+    return {
+        "device_sn": sn, "date": on.isoformat(),
+        "location_name": st["name"] if st else sn,
+        "kind": st["kind"] if st else None,
+        "generated_at": mock.now_kst().isoformat(),
+        **data,
+    }
 
 
 @app.websocket("/ws/live")
