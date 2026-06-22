@@ -23,24 +23,43 @@
     -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;letter-spacing:-.01em}
   ::-webkit-scrollbar{width:10px;height:10px}
   ::-webkit-scrollbar-thumb{background:#e2e8f0;border-radius:8px;border:3px solid var(--bg)}
-  /* ── 로그인/회원가입 게이트 ── */
-  .authScreen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:20px;z-index:100}
-  .authCard{width:100%;max-width:400px;background:var(--paper);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow-card);padding:34px 30px;text-align:center}
-  .authLogo{height:26px;margin-bottom:16px}
-  .authCard h1{font-size:19px;font-weight:800;margin:0;letter-spacing:-.3px}
-  .authSub{font-size:12.5px;color:var(--muted);margin:7px 0 22px}
+  /* ── 시작 화면(STS 인트로 정합): 좌 폼 패널 + 우 작업현장 브랜드 ── */
+  .authScreen{position:fixed;inset:0;display:flex;z-index:100;background:#082f68}
+  .authPanel{width:100%;max-width:480px;background:var(--paper);padding:40px;display:flex;flex-direction:column;
+    border-right:1px solid var(--line);overflow-y:auto}
+  .authInner{flex:1;display:flex;flex-direction:column;justify-content:center;width:100%;max-width:400px;margin:0 auto}
+  .authBrand{text-align:center;margin-bottom:24px}
+  .authLogo{height:34px;margin-bottom:14px}
+  .authBrand h1{font-size:25px;font-weight:800;margin:0;line-height:1.25;letter-spacing:-.4px}
+  .authSub{font-size:14px;color:var(--muted);font-weight:500;margin:8px 0 0}
+  .authBadge{display:inline-block;margin-top:12px;background:#e1f5ee;color:#0f6e56;font-weight:700;font-size:12.5px;padding:5px 15px;border-radius:999px}
   .authTabs{display:flex;gap:6px;background:var(--gray-0);border-radius:10px;padding:4px;margin-bottom:18px}
-  .authTab{flex:1;height:36px;border:none;background:transparent;border-radius:8px;font-family:var(--font);font-size:13.5px;font-weight:700;color:var(--muted);cursor:pointer}
+  .authTab{flex:1;height:38px;border:none;background:transparent;border-radius:8px;font-family:var(--font);font-size:14px;font-weight:700;color:var(--muted);cursor:pointer}
   .authTab.active{background:var(--paper);color:var(--kw);box-shadow:var(--shadow-card)}
-  .authForm{display:flex;flex-direction:column;gap:10px;text-align:left}
-  .authForm label{font-size:12px;font-weight:600;color:#334155;margin-bottom:-4px}
-  .authForm input{height:42px;border:1px solid var(--line);border-radius:10px;padding:0 13px;font-family:var(--font);font-size:14px}
+  .authForm{display:flex;flex-direction:column;gap:11px;text-align:left}
+  .authForm label{font-size:12.5px;font-weight:600;color:#334155;margin-bottom:-5px}
+  .authForm input{height:44px;border:1px solid var(--line);border-radius:10px;padding:0 13px;font-family:var(--font);font-size:14px}
   .authForm input:focus{outline:none;border-color:var(--kw);box-shadow:0 0 0 3px var(--kw-50)}
-  .authForm button.submit{height:44px;margin-top:6px;background:var(--kw);color:#fff;border:none;border-radius:10px;font-family:var(--font);font-size:14.5px;font-weight:700;cursor:pointer}
+  .authForm button.submit{height:46px;margin-top:6px;background:var(--kw);color:#fff;border:none;border-radius:10px;font-family:var(--font);font-size:15px;font-weight:700;cursor:pointer}
   .authForm button.submit:hover{background:#0d4290}
-  .authErr{color:var(--danger);font-size:12.5px;margin-top:12px;min-height:16px;font-weight:600}
-  .authDemo{margin-top:22px;padding-top:18px;border-top:1px solid var(--line-soft);font-size:12.5px;color:var(--muted)}
-  .authDemo .btn{margin-top:9px;width:100%;height:42px;justify-content:center;font-size:14px}
+  .authErr{color:var(--danger);font-size:12.5px;margin-top:12px;min-height:16px;font-weight:600;text-align:center}
+  .authOr{display:flex;align-items:center;color:var(--muted);font-size:12px;margin:18px 0}
+  .authOr::before,.authOr::after{content:"";flex:1;height:1px;background:var(--line-soft)}
+  .authOr span{padding:0 12px}
+  .authDemoBtn{width:100%;height:46px;border:1px solid var(--line);background:var(--paper);border-radius:10px;
+    font-family:var(--font);font-weight:700;font-size:14.5px;color:#334155;cursor:pointer}
+  .authDemoBtn:hover{background:var(--gray-0)}
+  .authFoot{font-size:11.5px;color:var(--muted);text-align:center;margin-top:18px;line-height:1.6}
+  .authFoot b{color:#334155}
+  .authCopy{text-align:center;font-size:11px;color:var(--muted);padding-top:16px}
+  .authHero{flex:1;display:flex;flex-direction:column;justify-content:flex-end;padding:56px;color:#fff;
+    background-size:cover;background-position:center;background-color:#0c3c82;
+    background-image:linear-gradient(135deg,rgba(6,33,74,.90) 0%,rgba(12,60,130,.74) 45%,rgba(180,83,9,.55) 100%),url('https://images.unsplash.com/photo-1704892712277-05dd8ba8831b?auto=format&fit=crop&w=1600&q=80')}
+  .authHero h2{font-size:44px;font-weight:900;line-height:1.15;margin:0 0 16px;max-width:600px;text-shadow:0 2px 12px rgba(0,0,0,.45)}
+  .authHero p{font-size:17px;font-weight:500;line-height:1.6;max-width:520px;margin:0 0 26px;color:rgba(255,255,255,.92);text-shadow:0 1px 8px rgba(0,0,0,.4)}
+  .heroPills{display:flex;gap:10px;flex-wrap:wrap}
+  .heroPill{display:inline-flex;align-items:center;gap:7px;padding:8px 15px;border-radius:999px;background:rgba(255,255,255,.16);font-size:14px;font-weight:600}
+  @media (max-width:880px){ .authHero{display:none} .authPanel{max-width:100%;border-right:none} }
 
   .shell{display:flex;min-height:100vh}
 
@@ -241,19 +260,35 @@
 </head>
 <body>
 <div class="authScreen" id="authScreen">
-  <div class="authCard">
-    <img src="/assets/kweather-logo.png" alt="KWEATHER" class="authLogo" />
-    <h1>실시간 폭염대응 솔루션</h1>
-    <p class="authSub">IoT 체감온도 · 실시간 위험감지 · 폭염 안전관리</p>
-    <div class="authTabs">
-      <button class="authTab active" id="tabLogin">로그인</button>
-      <button class="authTab" id="tabSignup">회원가입</button>
+  <div class="authPanel">
+    <div class="authInner">
+      <div class="authBrand">
+        <img src="/assets/kweather-logo.png" alt="KWEATHER" class="authLogo" />
+        <h1>실시간 폭염대응 솔루션</h1>
+        <p class="authSub">IoT 체감온도 · 실시간 위험감지 · 폭염 안전관리</p>
+        <span class="authBadge">케이웨더 IoT 단말기 이용자 전용</span>
+      </div>
+      <div class="authTabs">
+        <button class="authTab active" id="tabLogin">로그인</button>
+        <button class="authTab" id="tabSignup">회원가입</button>
+      </div>
+      <div id="authForm"></div>
+      <div class="authErr" id="authErr"></div>
+      <div class="authOr"><span>또는</span></div>
+      <button class="authDemoBtn" id="demoBtn">데모 계정으로 둘러보기</button>
+      <p class="authFoot">케이웨더 체감온도계 IoT 단말기 이용자 전용 서비스입니다. 회사별로 격리된 안전한 공간에서
+        실시간 데이터를 관리하며, 단말기 이용자는 <b>평생 무료</b>로 사용합니다.</p>
     </div>
-    <div id="authForm"></div>
-    <div class="authErr" id="authErr"></div>
-    <div class="authDemo">
-      먼저 둘러보시겠어요?
-      <button class="btn light" id="demoBtn">데모로 시작하기 →</button>
+    <div class="authCopy">© 2026 KWeather Inc. · 케이웨더(주)</div>
+  </div>
+  <div class="authHero">
+    <h2>현장을 지키는<br/>실시간 폭염 데이터</h2>
+    <p>케이웨더 IoT 체감온도계로 실시간 측정한 데이터로 폭염 위험을 즉시 감지하고, 산업안전보건 기준에 따른
+      안전관리와 자동 경보를 제공합니다.</p>
+    <div class="heroPills">
+      <span class="heroPill">⚡ 실시간 위험감지</span>
+      <span class="heroPill">🛡 법정 휴식 의무 진단</span>
+      <span class="heroPill">📊 기상청 외부 비교</span>
     </div>
   </div>
 </div>
