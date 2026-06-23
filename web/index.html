@@ -336,7 +336,47 @@
   .wizMsg{font-size:12.5px;margin-top:10px;min-height:16px}
 
   @media (max-width:1000px){ .layout{grid-template-columns:1fr} aside.alerts{position:static} .kpiGrid{grid-template-columns:repeat(2,1fr)} .rGrid{grid-template-columns:repeat(2,1fr)} }
-  @media (max-width:760px){ .navbar{display:none} .main{padding:14px} .hourGrid{grid-template-columns:repeat(6,1fr)} }
+  /* ── 모바일 내비(사이드바 숨김 대체): 상단바 + 하단 탭 ── */
+  .mTopbar,.mBottomNav{display:none}
+  .mTopbar{position:fixed;top:0;left:0;right:0;height:52px;z-index:95;background:var(--paper);border-bottom:1px solid var(--line);align-items:center;gap:10px;padding:0 14px}
+  .mTopbar .mLogo{height:20px}
+  .mTopbar .mTitle{font-size:14.5px;font-weight:800;letter-spacing:-.3px}
+  .mTopbar .mLogout{margin-left:auto;font-size:12px;font-weight:600;border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:7px 11px;color:#334155}
+  .mBottomNav{position:fixed;bottom:0;left:0;right:0;height:60px;z-index:95;background:var(--paper);border-top:1px solid var(--line);align-items:stretch;padding-bottom:env(safe-area-inset-bottom,0)}
+  .mBottomNav button{flex:1;border:none;background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;color:var(--muted)}
+  .mBottomNav button .mi{font-size:19px;line-height:1}
+  .mBottomNav button .ml{font-size:10px;font-weight:700}
+  .mBottomNav button.active{color:var(--kw)}
+  .tblScroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+  @media (max-width:760px){
+    .navbar{display:none}
+    body.authed .mTopbar{display:flex} body.authed .mBottomNav{display:flex}
+    .main{padding:14px!important}
+    body.authed .main{padding-top:64px!important;padding-bottom:74px!important}
+    .main.dashView{height:auto!important;overflow:visible!important}
+    .main.dashView .container{height:auto!important}
+    .dashBody{display:flex!important;flex-direction:column}
+    .dCards{grid-template-columns:1fr 1fr}
+    .chartFill{height:230px}
+    .kpiGrid,.mgmtSummary{grid-template-columns:repeat(2,1fr)!important}
+    .ctxBar{padding:13px 14px}
+    .ctxBar h1{font-size:16px}
+    .clockBox{display:none}     /* 시계는 모바일에서 공간 절약(상단바 대체) */
+    .hourGrid{grid-template-columns:repeat(6,1fr)}
+    .rGrid{grid-template-columns:repeat(2,1fr)}
+    .report{padding:18px 14px}
+    .devTable{min-width:640px}    /* 가로 스크롤로 잘림 방지 */
+    .filterBar input.search{min-width:120px}
+    .authPanel{padding:26px 20px}
+  }
+  @media (max-width:480px){
+    .dCards{grid-template-columns:1fr}
+    .kpiGrid,.mgmtSummary{grid-template-columns:repeat(2,1fr)!important}
+    .rGrid{grid-template-columns:1fr}
+    .hourGrid{grid-template-columns:repeat(4,1fr)}
+    .heroFeels .hv{font-size:34px}
+  }
   /* 화면이 좁거나 낮으면 무스크롤 그리드 해제 → 자연 흐름(스크롤 허용) */
   @media (max-width:1100px), (max-height:660px){
     .main.dashView{height:auto;overflow:visible;padding:16px}
@@ -425,6 +465,18 @@
   <main class="main"><div class="container" id="view"></div></main>
 </div>
 
+<div class="mTopbar" id="mTopbar">
+  <img src="/assets/kweather-logo.png" alt="KWEATHER" class="mLogo" />
+  <span class="mTitle">CRMaaS 폭염 관리</span>
+  <button class="mLogout" id="mLogout">로그아웃</button>
+</div>
+<nav class="mBottomNav" id="mBottomNav">
+  <button data-mnav="onboarding" id="mnav-onboard"><span class="mi">🚀</span><span class="ml">시작</span></button>
+  <button data-mnav="dash"><span class="mi">📊</span><span class="ml">대시보드</span></button>
+  <button data-mnav="report"><span class="mi">📄</span><span class="ml">리포트</span></button>
+  <button data-mnav="devices"><span class="mi">⚙️</span><span class="ml">기기</span></button>
+</nav>
+
 <script>
 const LV = {
   safe:{label:"안전",color:"#16a34a"}, attention:{label:"관심",color:"#84cc16"},
@@ -448,7 +500,7 @@ const PLANS={
   monthly:{name:"월간 구독",price:"₩49,000",unit:"/월",sub:"매월 자동 결제",rec:false},
 };
 let authPlan="annual";
-function showAuth(){ document.getElementById("appShell").style.display="none"; document.getElementById("authScreen").style.display="flex"; renderAuthForm(); }
+function showAuth(){ document.body.classList.remove("authed"); document.getElementById("appShell").style.display="none"; document.getElementById("authScreen").style.display="flex"; renderAuthForm(); }
 function planPicker(){
   return `<div class="planPick">${["annual","monthly"].map(c=>{const p=PLANS[c];
     return `<div class="planCard ${authPlan===c?'sel':''}" data-plan="${c}">${p.rec?'<span class="planRec">가장 인기</span>':''}
@@ -509,6 +561,8 @@ async function enterApp(){
   state.devices=dv.devices||[]; state.dates=dt.dates||[]; state.date=(dt.dates&&dt.dates[0])||null;
   state.sn="";
   document.getElementById("nav-onboard").style.display=demo?"none":"flex";
+  document.getElementById("mnav-onboard").style.display=demo?"none":"flex";
+  document.body.classList.add("authed");
   // 신규(기기 미등록) 계정은 온보딩 워크플로우로 자동 안내
   if(!demo && state.devices.length===0) state.view="onboarding";
   renderLegend(); setNav(); render(); connect();
@@ -530,7 +584,12 @@ document.getElementById("nav-onboard").onclick=()=>{ state.view="onboarding"; se
 document.getElementById("nav-dash").onclick=()=>{ state.view="dash"; setNav(); render(); };
 document.getElementById("nav-report").onclick=()=>{ state.view="report"; setNav(); render(); };
 document.getElementById("nav-devices").onclick=()=>{ state.view="devices"; setNav(); render(); };
-function setNav(){ for(const v of ["onboard","dash","report","devices"]){ const el=document.getElementById("nav-"+v); if(el) el.classList.toggle("active",state.view===(v==="onboard"?"onboarding":v)); } }
+function setNav(){
+  for(const v of ["onboard","dash","report","devices"]){ const el=document.getElementById("nav-"+v); if(el) el.classList.toggle("active",state.view===(v==="onboard"?"onboarding":v)); }
+  document.querySelectorAll("#mBottomNav button").forEach(b=>b.classList.toggle("active",b.dataset.mnav===state.view));
+}
+document.querySelectorAll("#mBottomNav button").forEach(b=>b.onclick=()=>{ state.view=b.dataset.mnav; setNav(); render(); window.scrollTo(0,0); });
+document.getElementById("mLogout").onclick=logout;
 
 function renderLegend(){
   document.getElementById("legend").innerHTML = ORDER.map(k=>{const v=LV[k];
@@ -799,10 +858,10 @@ function renderDevices(){
             <select id="fltModel"><option value="">전체 모델</option></select>
           </div>
           <div id="bulkBar"></div>
-          <table class="devTable"><thead><tr>
+          <div class="tblScroll"><table class="devTable"><thead><tr>
             ${demo?"":`<th style="width:34px"><input type="checkbox" id="selAll"/></th>`}
             <th>시리얼</th><th>이름</th><th class="center">종류 · 모델</th><th class="center">현재 체감</th><th class="center">상태</th>${demo?"":"<th>사업장</th>"}<th class="center">동작</th>
-          </tr></thead><tbody id="pageRows"><tr><td colspan="8" class="center"><div class="empty">불러오는 중…</div></td></tr></tbody></table>
+          </tr></thead><tbody id="pageRows"><tr><td colspan="8" class="center"><div class="empty">불러오는 중…</div></td></tr></tbody></table></div>
           <div class="pager" id="pager"></div>
         </div>
       </div>
