@@ -28,10 +28,32 @@ class Tenant(Base):
     kw_api_key: Mapped[str | None] = mapped_column(String)           # 계정별 AIR365 API 키
     plan_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     plan_renews_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    pg_provider: Mapped[str | None] = mapped_column(String)            # mobilians 등
+    billing_key: Mapped[str | None] = mapped_column(String)            # 정기결제 빌링키(암호화 저장)
+    card_name: Mapped[str | None] = mapped_column(String)              # 카드 표시명(끝 4자리 등)
+    next_billing_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     devices: Mapped[list["Device"]] = relationship(back_populates="tenant")
     sites: Mapped[list["Site"]] = relationship(back_populates="tenant")
+
+
+class Payment(Base):
+    """결제 이력(감사 로그) — 정기결제·단건 공통."""
+    __tablename__ = "payments"
+    __table_args__ = SCHEMA
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("heatguard.tenants.id", ondelete="CASCADE"), nullable=False)
+    provider: Mapped[str] = mapped_column(String, default="mobilians", nullable=False)
+    plan: Mapped[str | None] = mapped_column(String)
+    amount: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    status: Mapped[str] = mapped_column(String, default="pending", nullable=False)
+    method: Mapped[str | None] = mapped_column(String)
+    pg_tid: Mapped[str | None] = mapped_column(String)
+    message: Mapped[str | None] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Site(Base):

@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     # ── 보안 ──
     APP_ENC_KEY: str = ""                  # 자격증명 암호화 키(임의 패스프레이즈, 비면 평문)
 
+    # ── 결제(KG모빌리언스 정기결제) — 값은 Vercel env(암호화), 레포 금지 ──
+    MOBILIANS_MID: str = ""                # 정기결제 서비스ID(상점ID)
+    MOBILIANS_KEY: str = ""               # 정기결제 인증키
+    MOBILIANS_BILLING_BASE: str = ""      # 정기결제 API 베이스 URL(규격서 기준)
+    PG_TEST_MODE: bool = True             # 테스트 모드(실청구 차단)
+
     # ── 저장 ──
     DATABASE_URL: str = ""                 # 비면 메모리 전용(PoC). 추후 TimescaleDB.
     HISTORY_POINTS: int = 240              # 기기별 메모리 링버퍼 길이(≈ 2시간/30초)

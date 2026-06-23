@@ -19,12 +19,12 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import analytics, auth, collector, crypto, devices as dev_db, kw_iot, mock, sites as site_db
+from . import analytics, auth, billing, collector, crypto, devices as dev_db, kw_iot, mobilians, mock, sites as site_db
 from .config import settings
 from .database import SessionLocal, db_enabled
 from .deps import block_demo, get_db, get_tenant
 from .heat import LEVELS, classify, thresholds
-from .models import Device, Tenant
+from .models import Device, Payment, Tenant
 from .store import store
 from .ws import manager
 
@@ -410,6 +410,50 @@ def air365_disconnect(tenant: Tenant = Depends(get_tenant), db: Session = Depend
     tenant.kw_api_key = None
     db.commit()
     return {"ok": True}
+
+
+# ── 결제(구독) ──
+@app.get("/api/billing/status")
+def billing_status(tenant: Tenant = Depends(get_tenant)) -> dict:
+    plan = billing.get_plan(tenant.plan) or {}
+    return {
+        "plan": tenant.plan, "plan_name": plan.get("name"), "price": plan.get("price"),
+        "sub_status": tenant.sub_status,
+        "plan_renews_at": tenant.plan_renews_at.isoformat() if tenant.plan_renews_at else None,
+        "next_billing_at": tenant.next_billing_at.isoformat() if tenant.next_billing_at else None,
+        "has_billing_key": bool(tenant.billing_key), "card_name": tenant.card_name,
+        "provider": tenant.pg_provider or mobilians.PROVIDER,
+        "pg_configured": mobilians.configured(), "test_mode": settings.PG_TEST_MODE,
+    }
+
+
+@app.post("/api/billing/checkout")
+def billing_checkout(payload: dict = Body(...), tenant: Tenant = Depends(get_tenant)) -> dict:
+    """결제수단 등록/결제창 호출용 파라미터. 규격서·키 수령 전엔 ready=false."""
+    block_demo(tenant)
+    plan = billing.get_plan(payload.get("plan") or tenant.plan)
+    if not plan:
+        raise HTTPException(400, "요금제를 선택하세요.")
+    if not mobilians.configured():
+        return {"ready": False, "provider": mobilians.PROVIDER,
+                "message": "정기결제 연동 준비 중입니다(규격서·전용 키 수령 후 활성화)."}
+    try:
+        params = mobilians.checkout_params(tenant.id, plan["code"], plan["price"])
+        return {"ready": True, "provider": mobilians.PROVIDER, "params": params}
+    except NotImplementedError as e:
+        return {"ready": False, "provider": mobilians.PROVIDER, "message": str(e)}
+
+
+@app.post("/api/billing/mobilians/webhook")
+async def mobilians_webhook(payload: dict = Body(default={}), db: Session = Depends(get_db)) -> dict:
+    """모빌리언스 결제 결과 노티(서버-서버). 무인증(PG 호출). 무결성 검증 후 구독 갱신.
+
+    TODO(규격서): verify_callback로 해시 검증 → 주문번호로 테넌트 매핑 → Payment 기록 +
+    sub_status/next_billing_at 갱신. 현재는 수신 로깅만(실청구 없음).
+    """
+    ok = mobilians.verify_callback(payload)
+    log.info("[mobilians webhook] verified=%s keys=%s", ok, list(payload.keys()))
+    return {"received": True, "verified": ok}
 
 
 @app.get("/api/kpi")
