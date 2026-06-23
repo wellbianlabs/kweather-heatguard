@@ -243,6 +243,22 @@
   .guide{list-style:none;padding:0;margin:0}
   .guide li{position:relative;padding:9px 12px 9px 30px;background:var(--gray-0);border-radius:var(--r-md);margin-bottom:7px;font-size:12.5px;line-height:1.5;color:#334155}
   .guide li::before{content:"✓";position:absolute;left:12px;top:9px;color:var(--kw);font-weight:800}
+  /* 리포트 강화(STS급) */
+  .rDocNo{font-size:11.5px;color:var(--muted);margin-top:7px;font-variant-numeric:tabular-nums}
+  .approval{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:14px auto 0;max-width:330px}
+  .approval .ac{flex:1;text-align:center;border-left:1px solid var(--line-soft)}
+  .approval .ac:first-child{border-left:none}
+  .approval .ach{font-size:10.5px;color:var(--muted);background:var(--gray-0);padding:5px;border-bottom:1px solid var(--line-soft);font-weight:700}
+  .approval .acb{height:44px}
+  .rChart{margin-top:8px;background:var(--gray-0);border:1px solid var(--line-soft);border-radius:10px;padding:10px}
+  .rLegend{display:flex;gap:18px;font-size:11.5px;color:#475569;margin-top:4px;justify-content:center}
+  .rLegend i{display:inline-block;width:18px;height:0;border-top:2.5px solid;vertical-align:middle;margin-right:6px}
+  .analysis{list-style:none;padding:0;margin:0;counter-reset:an}
+  .analysis li{position:relative;padding:10px 12px 10px 36px;background:var(--gray-0);border-radius:10px;margin-bottom:8px;font-size:12.5px;line-height:1.6;color:#334155}
+  .analysis li.act{background:#fff7ed;color:#9a3412}
+  .analysis li::before{counter-increment:an;content:counter(an);position:absolute;left:11px;top:10px;width:18px;height:18px;border-radius:50%;background:var(--kw);color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center}
+  .rFooter{margin-top:22px;padding-top:14px;border-top:1px solid var(--line-soft);font-size:11px;color:var(--muted);line-height:1.65}
+  .rFooter b{color:#475569}
 
   /* ── 기기 관리 ── */
   .connBanner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;border-radius:var(--r-md);font-size:13px}
@@ -777,15 +793,47 @@ function loadReport(){
   if(!sn)return;
   api(`/api/report/daily?sn=${sn}&date=${date}`).then(r=>renderReportBody(r)).catch(()=>{});
 }
+function reportAnalysis(r){
+  const a=[], pk=r.peak_level||{}; const o33=r.minutes_over_33||0,o35=r.minutes_over_35||0,o38=r.minutes_over_38||0;
+  a.push({t:`최고 체감온도는 ${r.max_feels_like_time||"–"}경 <b>${r.max_feels_like??"–"}℃</b>로 관측되어 <b>${pk.label||"–"} 단계</b>에 해당하며, 당일 최고치를 기록했습니다${r.max_temperature!=null?` (당시 기온 ${r.max_temperature}℃).`:"."}`});
+  if(o38>0) a.push({act:true,t:`위험단계(체감 38℃ 이상)가 일일 <b>${fmtMin(o38)}</b> 지속되어, 폭염중대경보 기준상 긴급조치 작업을 제외한 옥외작업을 원칙적으로 중지해야 합니다.`});
+  else if(o35>0) a.push({act:true,t:`경고단계(체감 35℃ 이상)가 <b>${fmtMin(o35)}</b> 지속되어, 무더위 시간대(14~17시) 옥외작업 중지 및 작업시간 조기·야간 전환이 필요합니다.`});
+  else if(o33>0) a.push({t:`주의단계(체감 33℃ 이상)가 <b>${fmtMin(o33)}</b> 지속되어, 작업시간 조정·단축 및 충분한 음용수 섭취가 필요합니다.`});
+  if(r.legal_rest_count>0) a.push({act:true,t:`근무시간(09~18시) 중 체감 33℃ 이상 작업이 <b>${r.work_hot_label}</b> 누적되어, 산업안전보건규칙상 ‘2시간마다 20분 이상 휴식’ 기준으로 최소 <b>${r.legal_rest_count}회·총 ${r.legal_rest_minutes}분</b>의 휴식을 부여해야 합니다.`});
+  if(r.enclosed_alert){ a.push({act:true,t:`작업장 측정 체감온도가 기상청 외부 체감 대비 <b>최대 ${r.max_delta}℃</b> 높게 측정되어 ‘밀폐형 폭염 사업장’에 해당합니다(관리 임계 ${r.enclosed_threshold}℃ 초과).`});
+    a.push({t:`[대응 요령] 내부 체감이 외부보다 높은 시간대에는 환기·국소냉방·차열판 설치 등 작업환경 개선이 필요합니다.`}); }
+  else if(r.max_delta!=null&&r.max_delta>0) a.push({t:`작업장 측정 체감온도가 기상청 외부 체감 대비 최대 ${r.max_delta}℃ 높게 측정되었습니다(관리 임계 ${r.enclosed_threshold}℃ 이내).`});
+  if(r.avg_humidity!=null&&r.avg_humidity>=70) a.push({t:`평균 습도 <b>${r.avg_humidity}%</b>의 고온다습 환경으로 체열 발산이 저해되어 온열질환 발생 위험이 가중되는 조건입니다.`});
+  if(!a.length||(o33===0&&o35===0&&o38===0)) a.push({t:`측정 기간 중 폭염 위험단계(체감 33℃↑) 해당 사항이 없어, 통상적인 안전보건 관리체계를 유지하면 됩니다.`});
+  return a;
+}
+function reportChartSVG(compare){
+  const pts=(compare||[]).filter(c=>c.indoor_feels!=null); if(pts.length<2) return `<div class="empty">데이터 없음</div>`;
+  const w=720,h=230,L=40,R=14,T=14,B=28,iw=w-L-R,ih=h-T-B;
+  const vals=pts.flatMap(c=>[c.indoor_feels,c.external_feels].filter(v=>v!=null));
+  const min=Math.floor(Math.min(...vals,28))-1, max=Math.ceil(Math.max(...vals,40))+1;
+  const X=i=>L+i/(pts.length-1)*iw, Y=v=>T+(1-(v-min)/(max-min||1))*ih;
+  const line=(key,col,dash)=>{const d=pts.map((c,i)=>c[key]==null?null:`${i?'L':'M'}${X(i).toFixed(1)},${Y(c[key]).toFixed(1)}`).filter(Boolean).join(' ');
+    return `<path d="${d}" fill="none" stroke="${col}" stroke-width="2.4" ${dash?'stroke-dasharray="6 4"':''} stroke-linejoin="round"/>`;};
+  let grid=''; for(let t=Math.ceil(min/2)*2;t<=max;t+=4){const y=Y(t).toFixed(1);
+    grid+=`<line x1="${L}" x2="${w-R}" y1="${y}" y2="${y}" stroke="#e8edf3"/><text x="${L-6}" y="${(+y+3)}" text-anchor="end" font-size="9" fill="#94a3b8">${t}</text>`;}
+  let thr=''; [['danger',THRESH.danger],['warning',THRESH.warning],['caution',THRESH.caution]].forEach(([k,t])=>{ if(t>=min&&t<=max){const y=Y(t).toFixed(1);
+    thr+=`<line x1="${L}" x2="${w-R}" y1="${y}" y2="${y}" stroke="${LV[k].color}" stroke-opacity=".5" stroke-dasharray="3 4"/><text x="${w-R}" y="${(+y-3)}" text-anchor="end" font-size="8.5" fill="${LV[k].color}">${LV[k].label} ${t}℃</text>`;}});
+  let xax=''; pts.forEach((c,i)=>{ if(c.hour%3===0) xax+=`<text x="${X(i).toFixed(1)}" y="${h-9}" text-anchor="middle" font-size="9" fill="#94a3b8">${c.hour}시</text>`; });
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto" preserveAspectRatio="xMidYMid meet">${grid}${thr}
+    ${line('external_feels','#1790cd',true)}${line('indoor_feels','#0f499e',false)}${xax}</svg>`;
+}
 function renderReportBody(r){
   const el=document.getElementById("reportBody"); if(!el)return;
   const pk=r.peak_level||LV.safe;
   const gen=new Date(r.generated_at).toLocaleString("ko-KR",{dateStyle:"medium",timeStyle:"short"});
+  const docNo=`HG-${(r.date||"").replace(/-/g,"")}-${r.device_sn||""}`;
   const expRows=(r.exposure||[]).map(e=>`<tr><td class="lvl" style="background:${e.color}">${e.label}</td>
     <td>${e.threshold}℃ 이상</td><td style="font-weight:700">${e.label_time}</td></tr>`).join("");
   const hours=(r.hours||[]);
   const hourCells=hours.map(h=>`<div><div class="hourBar" style="background:${h.color}">${h.feels!=null?h.feels:"–"}<small>℃</small></div><div class="hourCell">${h.hour}시</div></div>`).join("");
   const guide=(r.guidance||[]).map(g=>`<li>${g}</li>`).join("");
+  const anal=reportAnalysis(r).map(x=>`<li class="${x.act?'act':''}">${x.t}</li>`).join("");
   const restWarn=(r.legal_rest_count>0)?`<div class="restNote"><b>법정 휴식 의무</b> — 근무시간(09~18시) 중 체감 33℃ 이상 작업 누적 ${r.work_hot_label}.
     산업안전보건규칙상 <b>2시간마다 20분 이상 휴식</b> 기준으로 최소 <b>${r.legal_rest_count}회 · 총 ${r.legal_rest_minutes}분</b>의 휴식을 부여해야 합니다.</div>`:"";
   const cmp=(r.compare||[]).filter(c=>c.indoor_feels!=null);
@@ -798,29 +846,49 @@ function renderReportBody(r){
     :(r.max_delta!=null?`<div class="infoTip" style="margin-top:9px">내부와 외부(기상청) 체감 최대 차이 ${r.max_delta}℃ — 관리 임계(${r.enclosed_threshold}℃) 이내.</div>`:"");
   el.innerHTML=`
     <div class="rHead"><h1>폭염 안전관리 일일 보고서</h1>
-      <div class="rmeta"><span>측정기: ${r.location_name} (${r.device_sn})</span><span>구분: ${r.kind==="indoor"?"실내":"옥외"}</span><span>분석일자: ${r.date}</span><span>발행: ${gen}</span></div></div>
+      <div class="rmeta"><span>사업장/측정기: ${r.location_name} (${r.device_sn})</span><span>구분: ${r.kind==="indoor"?"실내":"실외"}</span><span>분석일자: ${r.date}</span><span>발행일시: ${gen}</span></div>
+      <div class="rDocNo">문서번호 ${docNo} · 작성: CRMaaS 폭염 관리 솔루션(자동 생성)</div>
+      <div class="approval">
+        <div class="ac"><div class="ach">담당</div><div class="acb"></div></div>
+        <div class="ac"><div class="ach">안전관리자</div><div class="acb"></div></div>
+        <div class="ac"><div class="ach">대표</div><div class="acb"></div></div>
+      </div></div>
 
-    <div class="rSection"><h2>1. 측정 요약</h2>
+    <div class="rSection"><h2>1. 측정 개요</h2>
       <div class="rGrid">
         <div class="rStat"><div class="l">최고 체감온도</div><div class="v" style="color:${pk.color}">${r.max_feels_like??"–"}℃</div></div>
         <div class="rStat"><div class="l">발생 시각</div><div class="v">${r.max_feels_like_time||"–"}</div></div>
         <div class="rStat"><div class="l">최고 기온</div><div class="v">${r.max_temperature??"–"}℃</div></div>
-        <div class="rStat"><div class="l">위험단계</div><div class="v" style="color:${pk.color}">${pk.label}</div></div>
-      </div></div>
+        <div class="rStat"><div class="l">평균 습도</div><div class="v">${r.avg_humidity??"–"}%</div></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:11px">
+        <span class="level" style="background:${pk.color};color:#fff;font-size:13px;padding:5px 14px">${pk.label} 단계</span>
+        <span class="infoTip" style="margin:0">측정 기록 ${(r.hours||[]).length}개 구간 · 1분 간격 실시간 수집 기준</span></div></div>
 
     <div class="rSection"><h2>2. 위험단계별 노출시간</h2>
       <div class="tblScroll"><table class="exp"><thead><tr><th>위험단계</th><th>기준(체감)</th><th>누적 노출시간</th></tr></thead><tbody>${expRows}</tbody></table></div>
       ${restWarn}</div>
 
-    <div class="rSection"><h2>3. 시간대별 체감온도</h2>
-      <div class="hourGrid">${hourCells||'<div class="empty">데이터 없음</div>'}</div></div>
+    <div class="rSection"><h2>3. 시간대별 체감온도 추이</h2>
+      <div class="rChart">${reportChartSVG(r.compare)}
+        <div class="rLegend"><span><i style="border-color:#0f499e"></i>내부 체감(측정)</span><span><i style="border-color:#1790cd;border-top-style:dashed"></i>외부 체감(기상청)</span></div></div>
+      <div class="hourGrid" style="margin-top:12px">${hourCells||'<div class="empty">데이터 없음</div>'}</div></div>
 
     <div class="rSection"><h2>4. 내·외부 체감온도 분석 <span class="sectionSub" style="font-weight:600">(측정 vs 기상청)</span></h2>
       <div class="tblScroll"><table class="exp"><thead><tr><th>시각</th><th>내부 체감(측정)</th><th>외부 체감(기상청)</th><th>차이</th></tr></thead><tbody>${cmpRows||'<tr><td colspan="4">데이터 없음</td></tr>'}</tbody></table></div>
       ${enclWarn}</div>
 
-    <div class="rSection"><h2>5. 안전조치 가이드 <span class="sectionSub" style="font-weight:600">(고용노동부 2026 폭염 대책)</span></h2>
-      <ul class="guide">${guide}</ul></div>`;
+    <div class="rSection"><h2>5. 데이터 기반 종합 분석</h2>
+      <ul class="analysis">${anal}</ul></div>
+
+    <div class="rSection"><h2>6. 안전조치 가이드 <span class="sectionSub" style="font-weight:600">(고용노동부 2026 폭염 대책)</span></h2>
+      <ul class="guide">${guide}</ul></div>
+
+    <div class="rFooter">
+      <b>근거</b> 고용노동부 「2026 폭염 대비 노동자 건강보호 대책」(2026.5.13.) · 산업안전보건규칙 개정(2025.7.17.) — 체감 33℃ 이상 작업 시 2시간마다 20분 이상 휴식 의무 ·
+      기상청 폭염중대경보(체감 38℃↑) 기준. 외부 체감온도는 기상청 공식 여름철 체감온도 산식 적용.<br/>
+      본 보고서는 케이웨더 IoT 체감온도계 측정값을 기반으로 자동 생성되었습니다. · 문서번호 ${docNo}
+    </div>`;
 }
 
 /* ── 사업장 · 기기 관리 (대규모 플릿) ── */
