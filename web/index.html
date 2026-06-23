@@ -809,14 +809,14 @@ function renderReportBody(r){
       </div></div>
 
     <div class="rSection"><h2>2. 위험단계별 노출시간</h2>
-      <table class="exp"><thead><tr><th>위험단계</th><th>기준(체감)</th><th>누적 노출시간</th></tr></thead><tbody>${expRows}</tbody></table>
+      <div class="tblScroll"><table class="exp"><thead><tr><th>위험단계</th><th>기준(체감)</th><th>누적 노출시간</th></tr></thead><tbody>${expRows}</tbody></table></div>
       ${restWarn}</div>
 
     <div class="rSection"><h2>3. 시간대별 체감온도</h2>
       <div class="hourGrid">${hourCells||'<div class="empty">데이터 없음</div>'}</div></div>
 
     <div class="rSection"><h2>4. 내·외부 체감온도 분석 <span class="sectionSub" style="font-weight:600">(측정 vs 기상청)</span></h2>
-      <table class="exp"><thead><tr><th>시각</th><th>내부 체감(측정)</th><th>외부 체감(기상청)</th><th>차이</th></tr></thead><tbody>${cmpRows||'<tr><td colspan="4">데이터 없음</td></tr>'}</tbody></table>
+      <div class="tblScroll"><table class="exp"><thead><tr><th>시각</th><th>내부 체감(측정)</th><th>외부 체감(기상청)</th><th>차이</th></tr></thead><tbody>${cmpRows||'<tr><td colspan="4">데이터 없음</td></tr>'}</tbody></table></div>
       ${enclWarn}</div>
 
     <div class="rSection"><h2>5. 안전조치 가이드 <span class="sectionSub" style="font-weight:600">(고용노동부 2026 폭염 대책)</span></h2>
