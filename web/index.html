@@ -288,6 +288,32 @@
   .pager button{height:32px;min-width:34px;padding:0 9px;border:1px solid var(--line);background:var(--paper);border-radius:8px;cursor:pointer;font-weight:700;color:#334155}
   .pager button:disabled{opacity:.4;cursor:default}
   @media (max-width:900px){ .mgmtSummary{grid-template-columns:repeat(3,1fr)} .mgmtLayout{flex-direction:column} .treePanel{width:100%;flex:none;max-height:none} }
+  /* 온보딩 워크플로우(스텝퍼) */
+  .wiz{max-width:720px;margin:0 auto}
+  .wizHead{text-align:center;margin-bottom:6px}
+  .wizHead h1{font-size:22px;font-weight:800;margin:0;letter-spacing:-.3px}
+  .wizHead p{color:var(--muted);font-size:13.5px;margin-top:7px}
+  .wizProg{height:8px;background:var(--gray-0);border-radius:999px;overflow:hidden;margin:18px 0 20px}
+  .wizProg .bar{height:100%;background:var(--kw);transition:width .35s}
+  .step{display:flex;gap:14px;padding:16px 18px;border:1px solid var(--line);border-radius:14px;margin-bottom:12px;background:var(--paper)}
+  .step.done{background:var(--gray-0)}
+  .step.current{border-color:var(--kw);box-shadow:0 0 0 3px var(--kw-50)}
+  .step.locked{opacity:.55}
+  .stepNum{width:34px;height:34px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;background:var(--line-soft);color:var(--muted)}
+  .step.done .stepNum{background:#16a34a;color:#fff}
+  .step.current .stepNum{background:var(--kw);color:#fff}
+  .stepBody{flex:1;min-width:0}
+  .stepTitle{font-size:15px;font-weight:800;display:flex;align-items:center;gap:8px}
+  .stepTitle .sBadge{font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:999px}
+  .stepDesc{font-size:12.5px;color:var(--muted);margin-top:4px;line-height:1.55}
+  .stepAction{margin-top:13px}
+  .stepAction .field input,.stepAction select{height:40px;border:1px solid var(--line);border-radius:9px;padding:0 12px;font-family:var(--font);font-size:14px}
+  .checklist{margin:9px 0 0;padding:0;list-style:none;font-size:12.5px;color:#334155}
+  .checklist li{padding:5px 0 5px 24px;position:relative;line-height:1.5}
+  .checklist li::before{content:"✓";position:absolute;left:4px;color:var(--kw);font-weight:800}
+  .wizDone{text-align:center;padding:30px 20px}
+  .wizDone .big{font-size:40px}
+  .wizMsg{font-size:12.5px;margin-top:10px;min-height:16px}
 
   @media (max-width:1000px){ .layout{grid-template-columns:1fr} aside.alerts{position:static} .kpiGrid{grid-template-columns:repeat(2,1fr)} .rGrid{grid-template-columns:repeat(2,1fr)} }
   @media (max-width:760px){ .navbar{display:none} .main{padding:14px} .hourGrid{grid-template-columns:repeat(6,1fr)} }
@@ -365,6 +391,7 @@
       <div class="infoTip">체감 33℃↑ 작업 시 2시간마다 20분 휴식은 법적 의무입니다.</div>
     </div>
     <div class="bottomNav">
+      <div class="navlink" id="nav-onboard" style="display:none"><span class="ico">🚀</span>시작하기</div>
       <div class="navlink active" id="nav-dash"><span class="ico">▦</span>대시보드</div>
       <div class="navlink" id="nav-report"><span class="ico">▤</span>리포트</div>
       <div class="navlink" id="nav-devices"><span class="ico">⚙</span>기기 관리</div>
@@ -457,10 +484,14 @@ async function enterApp(){
     api("/api/thresholds").catch(()=>({})), api("/api/health").catch(()=>({})),
     api("/api/devices").catch(()=>({devices:[]})), api("/api/dates").catch(()=>({dates:[]}))]);
   if(th.thresholds) THRESH=th.thresholds;
-  state.mode = state.auth?.is_demo ? "실시간 데모" : "케이웨더 IoT";
+  const demo=!!state.auth?.is_demo;
+  state.mode = demo ? "실시간 데모" : "케이웨더 IoT";
   state.devices=dv.devices||[]; state.dates=dt.dates||[]; state.date=(dt.dates&&dt.dates[0])||null;
   state.sn="";
-  renderLegend(); render(); connect();
+  document.getElementById("nav-onboard").style.display=demo?"none":"flex";
+  // 신규(기기 미등록) 계정은 온보딩 워크플로우로 자동 안내
+  if(!demo && state.devices.length===0) state.view="onboarding";
+  renderLegend(); setNav(); render(); connect();
 }
 function renderAccount(){
   const a=state.auth||{}; const nm=a.name||a.email||"사용자";
@@ -475,10 +506,11 @@ document.getElementById("logoutBtn").onclick=logout;
 renderAuthForm();
 boot();
 
+document.getElementById("nav-onboard").onclick=()=>{ state.view="onboarding"; setNav(); render(); };
 document.getElementById("nav-dash").onclick=()=>{ state.view="dash"; setNav(); render(); };
 document.getElementById("nav-report").onclick=()=>{ state.view="report"; setNav(); render(); };
 document.getElementById("nav-devices").onclick=()=>{ state.view="devices"; setNav(); render(); };
-function setNav(){ for(const v of ["dash","report","devices"]) document.getElementById("nav-"+v).classList.toggle("active",state.view===v); }
+function setNav(){ for(const v of ["onboard","dash","report","devices"]){ const el=document.getElementById("nav-"+v); if(el) el.classList.toggle("active",state.view===(v==="onboard"?"onboarding":v)); } }
 
 function renderLegend(){
   document.getElementById("legend").innerHTML = ORDER.map(k=>{const v=LV[k];
@@ -486,7 +518,7 @@ function renderLegend(){
 }
 
 /* ── 라우터 ── */
-function render(){ if(state.view==="report") renderReport(); else if(state.view==="devices") renderDevices(); else renderDash(); }
+function render(){ if(state.view==="report") renderReport(); else if(state.view==="devices") renderDevices(); else if(state.view==="onboarding") renderOnboarding(); else renderDash(); }
 
 /* ── 대시보드 ── */
 function renderDash(){
@@ -1000,6 +1032,116 @@ async function delDevice(serial){
   if(!confirm(`${serial} 기기를 삭제할까요?`))return;
   await fetch(`/api/devices/${serial}`,{method:"DELETE",headers:authHeaders()});
   reloadMgmt();
+}
+
+/* ── 온보딩 워크플로우(시작하기 위저드) ── */
+let _wizSites=[];
+async function renderOnboarding(){
+  document.querySelector(".main").classList.remove("dashView");
+  const a=state.auth||{};
+  const [integ,sresp,sum]=await Promise.all([
+    api("/api/integrations/air365").catch(()=>({})),
+    api("/api/sites").catch(()=>({sites:[]})),
+    api("/api/devices/summary").catch(()=>({}))]);
+  _wizSites=sresp.sites||[];
+  const prepKey="hg_prep_"+(a.email||"x");
+  const st={ subscribe:true, prepare:localStorage.getItem(prepKey)==="1",
+    connect:!!integ.connected, site:(_wizSites.length>0), device:(sum.total||0)>0 };
+  const order=["subscribe","prepare","connect","site","device"];
+  const doneCount=order.filter(k=>st[k]).length, allDone=doneCount===order.length;
+  const current=order.find(k=>!st[k]);
+  const meta={
+    subscribe:{t:"구독 시작",d:`${a.plan_name||"구독"} 활성화됨 — 요금제·결제 완료`},
+    prepare:{t:"장비 · AIR365 준비",d:"케이웨더 IoT 체감온도계를 구매·설치하고 AIR365에 등록한 뒤, 케이웨더에서 API 키를 발급받습니다."},
+    connect:{t:"AIR365 연동",d:"발급받은 AIR365 계정 ID와 API 키로 내 계정을 연결합니다(로그인 비밀번호가 아닌 API 키)."},
+    site:{t:"사업장 등록",d:"기기를 설치한 사업장(지역·이름)을 등록합니다. 여러 지역·사업장을 추가할 수 있습니다."},
+    device:{t:"기기 가져오기",d:"AIR365에 등록된 기기를 불러와 사업장에 배정하면 실시간 모니터링이 시작됩니다."},
+  };
+  const stepHtml=order.map((k,i)=>{
+    const done=st[k], cur=(k===current), cls=done?"done":(cur?"current":"locked");
+    const badge=done?'<span class="sBadge" style="background:#dcfce7;color:#166534">완료</span>'
+      :(cur?'<span class="sBadge" style="background:var(--kw-50);color:var(--kw)">진행 중</span>':"");
+    return `<div class="step ${cls}"><div class="stepNum">${done?"✓":(i+1)}</div>
+      <div class="stepBody"><div class="stepTitle">${meta[k].t}${badge}</div>
+      <div class="stepDesc">${meta[k].d}</div>${(cur&&!done)?`<div class="stepAction">${wizAction(k)}</div>`:""}</div></div>`;
+  }).join("");
+  view.innerHTML=`<div class="wiz">
+    <div class="wizHead"><h1>🚀 폭염 관리 시작하기</h1><p>${allDone?"모든 설정이 완료되었습니다.":`${doneCount} / ${order.length} 단계 완료 — 안내에 따라 진행하세요`}</p></div>
+    <div class="wizProg"><div class="bar" style="width:${Math.round(doneCount/order.length*100)}%"></div></div>
+    ${allDone?`<div class="paper wizDone"><div class="big">🎉</div>
+      <div style="font-size:17px;font-weight:800;margin-top:8px">설정이 완료되었습니다</div>
+      <div class="stepDesc">이제 실시간 대시보드에서 폭염 위험을 모니터링하고 보고서를 생성하세요.</div>
+      <button class="btn primary" style="margin-top:16px" id="wizGo">대시보드로 이동 →</button></div>`:stepHtml}
+  </div>`;
+  if(allDone){ document.getElementById("wizGo").onclick=()=>{ state.view="dash"; setNav(); render(); }; return; }
+  wireWizard(current);
+}
+function wizAction(k){
+  if(k==="prepare") return `<ul class="checklist">
+    <li>케이웨더 IoT 체감온도계(실내/실외) 구매 · 현장 설치</li>
+    <li>AIR365 앱/포털에서 기기 등록(시리얼 연결)</li>
+    <li>케이웨더에 IoT Open API 키 발급 요청(내 계정 기준)</li></ul>
+    <button class="btn primary" id="wizPrep" style="margin-top:11px">준비를 마쳤어요 · 다음 →</button>`;
+  if(k==="connect") return `<div class="addForm" style="margin:0;padding:0;border:none">
+    <div class="field"><label>AIR365 계정 ID</label><input id="wzUser" placeholder="company@kweather.co.kr"/></div>
+    <div class="field"><label>API 키</label><input id="wzKey" type="password" placeholder="발급받은 서비스 키"/></div>
+    <button class="btn primary" id="wzConnect">연결하고 저장</button></div><div class="wizMsg" id="wzMsg"></div>`;
+  if(k==="site") return `<div class="addForm" style="margin:0;padding:0;border:none">
+    <div class="field"><label>지역</label><input id="wzRegion" placeholder="예: 수도권"/></div>
+    <div class="field"><label>사업장 이름</label><input id="wzName" placeholder="예: 서울 본사"/></div>
+    <div class="field"><label>주소(선택)</label><input id="wzAddr" placeholder="예: 서울특별시 …"/></div>
+    <button class="btn primary" id="wzSite">사업장 등록</button></div><div class="wizMsg" id="wzMsg"></div>`;
+  if(k==="device") return `<div id="wzImport"><button class="btn light" id="wzLoadDev">⬇ AIR365 기기 불러오기</button></div>`;
+  return "";
+}
+function wireWizard(cur){
+  if(cur==="prepare") document.getElementById("wizPrep").onclick=()=>{ localStorage.setItem("hg_prep_"+(state.auth.email||"x"),"1"); renderOnboarding(); };
+  if(cur==="connect") document.getElementById("wzConnect").onclick=wizConnect;
+  if(cur==="site") document.getElementById("wzSite").onclick=wizSite;
+  if(cur==="device") document.getElementById("wzLoadDev").onclick=wizLoadDevices;
+}
+async function wizConnect(){
+  const user_id=document.getElementById("wzUser").value.trim(), api_key=document.getElementById("wzKey").value.trim();
+  const msg=document.getElementById("wzMsg");
+  if(!user_id||!api_key){ msg.style.color="var(--danger)"; msg.textContent="계정 ID와 API 키를 입력하세요."; return; }
+  msg.style.color="var(--muted)"; msg.textContent="연결 확인 중…";
+  const r=await fetch("/api/integrations/air365",{method:"POST",headers:authHeaders({"Content-Type":"application/json"}),body:JSON.stringify({user_id,api_key})});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok){ msg.style.color="var(--danger)"; msg.textContent=j.detail||"연결 실패"; return; }
+  renderOnboarding();
+}
+async function wizSite(){
+  const region=document.getElementById("wzRegion").value.trim(), name=document.getElementById("wzName").value.trim(), address=document.getElementById("wzAddr").value.trim();
+  const msg=document.getElementById("wzMsg");
+  if(!name){ msg.style.color="var(--danger)"; msg.textContent="사업장 이름을 입력하세요."; return; }
+  const r=await fetch("/api/sites",{method:"POST",headers:authHeaders({"Content-Type":"application/json"}),body:JSON.stringify({name,address,region})});
+  if(!r.ok){ msg.style.color="var(--danger)"; msg.textContent="등록 실패"; return; }
+  renderOnboarding();
+}
+async function wizLoadDevices(){
+  const box=document.getElementById("wzImport"); box.innerHTML=`<div class="stepDesc">불러오는 중…</div>`;
+  const a=await api("/api/air365/devices").catch(()=>({devices:[],reachable:false}));
+  if(!a.reachable){ box.innerHTML=`<div class="wizMsg" style="color:var(--danger)">AIR365 연결 실패 — ${a.error||"연동을 먼저 확인하세요"}</div>`; return; }
+  const avail=(a.devices||[]).filter(d=>!d.imported);
+  const rows=(a.devices||[]).map(d=>`<label class="air365Row" style="border:none;padding:6px 0;cursor:pointer">
+    <input type="checkbox" data-wimp="${d.serial}" ${d.imported?"disabled checked":""}/>
+    <div style="flex:1"><b>${d.serial}</b> · ${d.name}
+      <span class="kindBadge ${d.kind==="indoor"?"indoor":"outdoor"}">${d.kind==="indoor"?"실내":"실외"}</span>
+      <span class="typeBadge">${d.model||""}</span></div>${d.imported?'<span class="stBadge on">가져옴</span>':""}</label>`).join("");
+  box.innerHTML=`<div class="stepDesc" style="margin-bottom:6px">가져올 기기 선택 (${avail.length}대 가능)</div>${rows||"<div class='empty'>계정에 기기가 없습니다.</div>"}
+    <div style="display:flex;gap:9px;align-items:center;margin-top:11px;flex-wrap:wrap">
+      <span style="font-size:12.5px;color:var(--muted)">사업장</span>
+      <select class="siteMini" id="wzImpSite">${_wizSites.map(s=>`<option value="${s.id}">${s.region?`[${s.region}] `:""}${s.name}</option>`).join("")}</select>
+      <button class="btn primary" id="wzDoImport" style="margin-left:auto">선택 가져오기</button></div>`;
+  document.getElementById("wzDoImport").onclick=wizDoImport;
+}
+async function wizDoImport(){
+  const serials=[...document.querySelectorAll("[data-wimp]:checked:not([disabled])")].map(c=>c.dataset.wimp);
+  if(!serials.length){ alert("가져올 기기를 선택하세요."); return; }
+  const site_id=document.getElementById("wzImpSite").value;
+  const r=await fetch("/api/air365/import",{method:"POST",headers:authHeaders({"Content-Type":"application/json"}),body:JSON.stringify({serials,site_id:Number(site_id)})});
+  if(!r.ok){ alert("가져오기 실패"); return; }
+  renderOnboarding();
 }
 
 /* ── 실시간 연결(WS→폴링) ── */
