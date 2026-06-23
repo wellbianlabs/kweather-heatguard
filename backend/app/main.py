@@ -62,14 +62,19 @@ def _ensure_demo() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _ensure_demo()
-    task = asyncio.create_task(collector.run()) if settings.RUN_COLLECTOR else None
+    tasks = []
+    if settings.RUN_COLLECTOR:
+        tasks.append(asyncio.create_task(collector.run()))
+    if settings.INGEST_WORKER:   # 자가호스트: 무인 1분 자동 수집
+        tasks.append(asyncio.create_task(ingest_svc.run_worker()))
     try:
         yield
     finally:
-        if task is not None:
-            task.cancel()
+        for t in tasks:
+            t.cancel()
+        for t in tasks:
             try:
-                await task
+                await t
             except asyncio.CancelledError:
                 pass
 

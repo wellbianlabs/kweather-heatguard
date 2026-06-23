@@ -5,13 +5,19 @@
 """
 from __future__ import annotations
 
+import asyncio
+import logging
 from datetime import datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import crypto, devices as dev_db, kw_iot
+from .config import settings
+from .database import SessionLocal
 from .models import SensorLog, Tenant
+
+log = logging.getLogger("heatguard.ingest")
 
 
 async def ingest_for_tenant(db: Session, tenant: Tenant) -> dict:
@@ -60,6 +66,28 @@ def history(db: Session, tenant: Tenant, serial: str, limit: int = 240) -> list[
     rows = list(reversed(rows))
     return [{"at": r.measured_at.isoformat(), "feels_like": r.feels_like,
              "temperature": r.temperature, "humidity": r.humidity} for r in rows]
+
+
+async def run_worker() -> None:
+    """무인 수집 — 일정 주기로 모든 실계정의 등록 기기를 적재(자가호스트 서버용)."""
+    log.info("수집 워커 시작 — 주기 %ss", settings.INGEST_INTERVAL_SEC)
+    while True:
+        try:
+            with SessionLocal() as db:
+                tenants = db.scalars(select(Tenant).where(Tenant.is_demo.is_(False))).all()
+                total = 0
+                for t in tenants:
+                    if not dev_db.serials_for(db, t):
+                        continue
+                    res = await ingest_for_tenant(db, t)
+                    total += res.get("stored", 0)
+                if total:
+                    log.info("적재 %d건", total)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001
+            log.error("수집 워커 오류: %s", e)
+        await asyncio.sleep(settings.INGEST_INTERVAL_SEC)
 
 
 def day_logs(db: Session, tenant: Tenant, serial: str, day) -> list[dict]:
