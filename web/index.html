@@ -198,6 +198,26 @@
   .card.mini .meta{margin-top:8px}
   .card.mini .cmp{margin-top:7px;padding-top:7px}
   .card.mini .spark{height:30px;margin-top:auto}
+  /* 실시간 측정 카드(리뉴얼) */
+  .cardTop{display:flex;align-items:center;gap:6px}
+  .liveDot{width:7px;height:7px;border-radius:50%;background:#22c55e;flex:0 0 auto;animation:pulse 1.6s infinite}
+  .liveTxt{font-size:9.5px;font-weight:800;color:#16a34a;letter-spacing:.6px}
+  .cardTop .cnm{font-size:12.5px;font-weight:700;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cardTop .cardTime{margin-left:auto;font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .heroFeels{display:flex;align-items:baseline;gap:8px;margin:8px 0 1px}
+  .heroFeels .hv{font-size:38px;font-weight:800;line-height:1;letter-spacing:-1.5px}
+  .heroFeels .hv small{font-size:15px;font-weight:700;color:var(--muted);letter-spacing:0}
+  .heroFeels .level{font-size:11px;padding:3px 10px}
+  .heroLabel{font-size:11px;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:6px}
+  .mGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:11px}
+  .mItem{background:var(--gray-0);border:1px solid var(--line-soft);border-radius:9px;padding:8px 5px;text-align:center}
+  .mItem .ml{font-size:9.5px;color:var(--muted);font-weight:700}
+  .mItem .mv{font-size:15.5px;font-weight:800;margin-top:3px;letter-spacing:-.4px;color:#1e293b}
+  .mItem.ext{background:#eef7fc;border-color:#cfe9f7}
+  .mItem.ext .ml{color:#0a7fb8}
+  .mItem.ext .mv{color:var(--sky)}
+  .deltaNote{font-size:10.5px;color:var(--muted);margin-top:7px;text-align:center}
+  .deltaNote b{color:var(--warning)}
 
   /* ── 리포트 ── */
   .report{padding:26px 30px}
@@ -525,7 +545,7 @@ function renderDash(){
   document.querySelector(".main").classList.add("dashView");
   view.innerHTML = `
     <div class="paper ctxBar">
-      <div><h1>실시간 현황</h1><div class="csub">사업장·기기별 체감온도 실시간 모니터링 및 폭염 위험감지</div></div>
+      <div><h1>실시간 현황</h1><div class="csub">1분 간격 실시간 수집 · 온도·습도·체감온도·기상청 외부 체감을 한눈에</div></div>
       <div class="field"><label>측정기</label>${deviceSelect("dashSn")}</div>
       <span class="extPill" id="extPill">기상청 외부 –℃</span>
       <span class="badge" id="modeBadge">${state.mode||"실시간"}</span>
@@ -634,15 +654,22 @@ function sparkline(history){
 function card(st){
   const lt=st.latest||{},lv=LV[lt.level||"safe"];
   const ef=lt.external_feels, d=lt.delta;
+  const tm=lt.measured_at?new Date(lt.measured_at).toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"}):"";
   const dStr=(d==null)?"":(d>0?`+${d}`:`${d}`);
-  const dCol=(d!=null&&d>0)?LV.warning.color:"var(--muted)";
-  const ext=(ef!=null)?`<div class="cmp"><span>기상청 외부 <b>${ef}℃</b></span><span style="color:${dCol}">차이 ${dStr}℃</span>${lt.enclosed?`<span class="encl">밀폐형</span>`:""}</div>`:"";
+  const delta=(ef!=null&&d!=null)?`<div class="deltaNote">내·외부 체감 차이 <b>${dStr}℃</b>${lt.enclosed?' · <b style="color:#dc2626">밀폐형 경보</b>':""}</div>`:"";
   return `<div class="paper card mini"><div class="bar" style="background:${lv.color}"></div>
-    <div class="cname">${st.name} <span class="kind">${st.kind==="indoor"?"실내":"옥외"}</span></div>
-    <div class="feels" style="color:${lv.color}">${lt.feels_like??"–"}<small> ℃ 체감</small></div>
-    <span class="level" style="background:${lv.color}">${lv.label}</span>
-    <div class="meta"><span>🌡 ${lt.temperature??"–"}℃</span><span>💧 ${lt.humidity??"–"}%</span></div>
-    ${ext}${sparkline(st.history)}</div>`;
+    <div class="cardTop"><span class="liveDot"></span><span class="liveTxt">LIVE</span>
+      <span class="cnm">${st.name}</span><span class="kind">${st.kind==="indoor"?"실내":"실외"}</span>
+      <span class="cardTime">⏱ ${tm||"--:--"}</span></div>
+    <div class="heroFeels"><span class="hv" style="color:${lv.color}">${lt.feels_like??"–"}<small>℃</small></span>
+      <span class="level" style="background:${lv.color}">${lv.label}</span></div>
+    <div class="heroLabel">체감온도 (1분 간격 실시간 수집)</div>
+    <div class="mGrid">
+      <div class="mItem"><div class="ml">🌡 온도</div><div class="mv">${lt.temperature??"–"}℃</div></div>
+      <div class="mItem"><div class="ml">💧 습도</div><div class="mv">${lt.humidity??"–"}%</div></div>
+      <div class="mItem ext"><div class="ml">기상청 외부</div><div class="mv">${ef??"–"}℃</div></div>
+    </div>${delta}
+    ${sparkline(st.history)}</div>`;
 }
 function renderGrid(snap){
   const g=document.getElementById("grid"); if(!g)return;
