@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -37,6 +37,21 @@ class Tenant(Base):
 
     devices: Mapped[list["Device"]] = relationship(back_populates="tenant")
     sites: Mapped[list["Site"]] = relationship(back_populates="tenant")
+
+
+class SensorLog(Base):
+    """실 IoT 측정 기록 — 케이웨더 API에서 읽어온 값을 적재(실시간 기록·시계열 표출)."""
+    __tablename__ = "sensor_logs"
+    __table_args__ = (UniqueConstraint("tenant_id", "serial", "measured_at", name="uq_sensorlog"), SCHEMA)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("heatguard.tenants.id", ondelete="CASCADE"), nullable=False)
+    serial: Mapped[str] = mapped_column(String, nullable=False)
+    measured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    temperature: Mapped[float | None] = mapped_column(Float)
+    humidity: Mapped[float | None] = mapped_column(Float)
+    feels_like: Mapped[float | None] = mapped_column(Float)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Payment(Base):

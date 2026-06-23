@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import analytics, auth, billing, collector, crypto, devices as dev_db, kw_iot, mobilians, mock, sites as site_db
+from . import analytics, auth, billing, collector, crypto, devices as dev_db, ingest as ingest_svc, kw_iot, mobilians, mock, sites as site_db
 from .config import settings
 from .database import SessionLocal, db_enabled
 from .deps import block_demo, get_db, get_tenant
@@ -151,9 +151,11 @@ def _demo_latest_by_serial() -> dict:
 
 
 async def _real_live(db: Session, tenant: Tenant) -> dict:
-    """실계정 라이브 — 등록 시리얼을 케이웨더 API로 조회해 스냅샷 구성(히스토리 없음)."""
+    """실계정 라이브 — 케이웨더 API 조회 → DB 적재(기록) → 스냅샷+히스토리 표출."""
     devs = {d.serial: d for d in dev_db.list_for(db, tenant)}
     now = mock.now_kst()
+    # 읽어온 값을 sensor_logs 에 기록(새 측정시각만 누적). 폴링/크론이 호출할 때마다 실시간 적재.
+    rec = await ingest_svc.ingest_for_tenant(db, tenant)
     try:
         readings = {r["sn"]: r for r in await kw_iot.fetch_real_readings(crypto.decrypt(tenant.kw_api_key), tenant.kw_user_id)}
     except Exception:  # noqa: BLE001
@@ -168,7 +170,10 @@ async def _real_live(db: Session, tenant: Tenant) -> dict:
         latest = {"sn": serial, "name": d.name, "kind": d.kind, "measured_at": at,
                   "temperature": r["temperature"], "humidity": r["humidity"], "feels_like": r["feels_like"],
                   "level": lvl.code, "level_label": lvl.label, "level_color": lvl.color}
-        stations.append({"sn": serial, "name": d.name, "kind": d.kind, "latest": latest, "history": []})
+        hist = ingest_svc.history(db, tenant, serial, 240)
+        for hp in hist:
+            hp["level"] = classify(hp.get("feels_like")).code
+        stations.append({"sn": serial, "name": d.name, "kind": d.kind, "latest": latest, "history": hist})
         if lvl.rank >= LEVELS["caution"].rank:
             from .alerts import ACTION
             alerts.append({"at": now.isoformat(), "sn": serial, "name": d.name, "kind": d.kind,
@@ -471,7 +476,11 @@ def timeseries(sn: str, date: str | None = None, interval: int = 10,
                tenant: Tenant = Depends(get_tenant), db: Session = Depends(get_db)) -> dict:
     on = _parse_date(date)
     is_today = on == mock.now_kst().date()
-    pts = _downsample(_points_for(dev_db.serials_for(db, tenant), sn, on, is_today), interval)
+    if tenant.is_demo:
+        raw = _points_for(dev_db.serials_for(db, tenant), sn, on, is_today)
+    else:
+        raw = ingest_svc.day_logs(db, tenant, sn, on)   # 실데이터(기록된 측정값)
+    pts = _downsample(raw, interval)
     ext = {p["at"]: p for p in _downsample(
         [{"at": e["at"], "feels_like": e["feels"], "temperature": e["temperature"]} for e in mock.external_series(on)],
         interval)}
@@ -488,6 +497,14 @@ def timeseries(sn: str, date: str | None = None, interval: int = 10,
     return {"device_sn": sn, "date": on.isoformat(), "interval_minutes": interval, "points": pts,
             "max_delta": max_delta, "enclosed_alert": max_delta is not None and max_delta >= settings.ENCLOSED_DELTA_ALERT,
             "enclosed_threshold": settings.ENCLOSED_DELTA_ALERT}
+
+
+@app.post("/api/ingest")
+async def ingest_now(tenant: Tenant = Depends(get_tenant), db: Session = Depends(get_db)) -> dict:
+    """등록 기기 현재값을 케이웨더에서 읽어 즉시 기록(적재). 대시보드/크론이 호출."""
+    if tenant.is_demo:
+        return {"fetched": 0, "stored": 0, "demo": True}
+    return await ingest_svc.ingest_for_tenant(db, tenant)
 
 
 @app.get("/api/weekly")
