@@ -31,3 +31,9 @@ def get_tenant(x_api_key: str | None = Header(None), db: Session = Depends(get_d
 def block_demo(tenant: Tenant) -> None:
     if tenant.is_demo:
         raise HTTPException(403, "데모 계정은 읽기 전용입니다.")
+
+
+def get_admin(tenant: Tenant = Depends(get_tenant)) -> Tenant:
+    if not tenant.is_admin:
+        raise HTTPException(403, "관리자 전용 페이지입니다.")
+    return tenant

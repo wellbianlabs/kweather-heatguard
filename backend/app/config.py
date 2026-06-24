@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     SLACK_WEBHOOK_URL: str = ""            # 비면 경보를 콘솔/WS 피드로만 송출
     ALERT_DEBOUNCE_SEC: int = 600          # 동일 기기·단계 재경보 억제(중복 방지)
 
+    # ── 관리자 ──
+    ADMIN_EMAILS: str = "admin@wellbianlabs.io,cmlee@kweather.co.kr"  # 관리자 이메일(csv)
+
     # ── 보안 ──
     APP_ENC_KEY: str = ""                  # 자격증명 암호화 키(임의 패스프레이즈, 비면 평문)
 

@@ -52,8 +52,11 @@ def _clean(v: str | None) -> str:
 
 
 def resolve_creds(api_key: str | None = None, user_id: str | None = None) -> tuple[str, str]:
-    """계정별 자격증명 우선, 없으면 플랫폼 env 폴백."""
-    return _clean(api_key or settings.KW_IOT_API_KEY), _clean(user_id or settings.KW_IOT_USER_ID)
+    """우선순위: 인자(계정별) > 관리자 입력(DB appsettings) > 플랫폼 env."""
+    from . import appsettings
+    key = api_key or appsettings.get("KW_IOT_API_KEY") or settings.KW_IOT_API_KEY
+    uid = user_id or appsettings.get("KW_IOT_USER_ID") or settings.KW_IOT_USER_ID
+    return _clean(key), _clean(uid)
 
 
 def has_credentials(api_key: str | None = None, user_id: str | None = None) -> bool:

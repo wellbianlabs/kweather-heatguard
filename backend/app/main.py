@@ -19,12 +19,12 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import analytics, auth, billing, collector, crypto, devices as dev_db, ingest as ingest_svc, kw_iot, mobilians, mock, sites as site_db
+from . import analytics, appsettings, auth, billing, collector, crypto, devices as dev_db, ingest as ingest_svc, kw_iot, mobilians, mock, sites as site_db
 from .config import settings
-from .database import SessionLocal, db_enabled
-from .deps import block_demo, get_db, get_tenant
+from .database import Base, SessionLocal, db_enabled, engine
+from .deps import block_demo, get_admin, get_db, get_tenant
 from .heat import LEVELS, classify, thresholds
-from .models import Device, Payment, Tenant
+from .models import Device, Payment, SensorLog, Site, Tenant
 from .store import store
 from .ws import manager
 
@@ -59,8 +59,20 @@ def _ensure_demo() -> None:
         log.warning("데모 시드 보장 실패(무시): %s", e)
 
 
+def _ensure_tables() -> None:
+    """신규 테이블(app_settings 등) 생성 — 기존 테이블은 checkfirst로 건너뜀."""
+    if not db_enabled():
+        return
+    try:
+        Base.metadata.create_all(engine, checkfirst=True)
+    except Exception as e:  # noqa: BLE001
+        log.warning("테이블 보강 실패(무시): %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _ensure_tables()
+    appsettings.load()
     _ensure_demo()
     tasks = []
     if settings.RUN_COLLECTOR:
@@ -464,6 +476,66 @@ async def mobilians_webhook(payload: dict = Body(default={}), db: Session = Depe
     ok = mobilians.verify_callback(payload)
     log.info("[mobilians webhook] verified=%s keys=%s", ok, list(payload.keys()))
     return {"received": True, "verified": ok}
+
+
+# ── 관리자 ──
+@app.get("/api/admin/overview")
+def admin_overview(admin: Tenant = Depends(get_admin), db: Session = Depends(get_db)) -> dict:
+    from sqlalchemy import func as F, select as S
+    now = mock.now_kst()
+    day_start = datetime(now.year, now.month, now.day)
+    accounts = db.scalar(S(F.count(Tenant.id)).where(Tenant.is_demo.is_(False))) or 0
+    sites = db.scalar(S(F.count(Site.id))) or 0
+    devices = db.scalar(S(F.count(Device.id)).where(Device.source != "demo")) or 0
+    logs_total = db.scalar(S(F.count(SensorLog.id))) or 0
+    logs_today = db.scalar(S(F.count(SensorLog.id)).where(SensorLog.recorded_at >= day_start)) or 0
+    recent = db.execute(
+        S(Tenant.email, Tenant.name, Tenant.plan, Tenant.created_at)
+        .where(Tenant.is_demo.is_(False)).order_by(Tenant.created_at.desc()).limit(10)).all()
+    return {
+        "accounts": accounts, "sites": sites, "devices": devices,
+        "logs_total": logs_total, "logs_today": logs_today,
+        "recent_accounts": [{"email": e, "name": n, "plan": p,
+                             "created_at": (c.isoformat() if c else None)} for e, n, p, c in recent],
+    }
+
+
+@app.get("/api/admin/system")
+def admin_system(admin: Tenant = Depends(get_admin)) -> dict:
+    return {"db": db_enabled(), "version": app.version,
+            "kweather_configured": kw_iot.has_credentials(),
+            "ingest_worker": settings.INGEST_WORKER, "ingest_interval_sec": settings.INGEST_INTERVAL_SEC,
+            "mock_mode": settings.USE_MOCK, "pg_test_mode": settings.PG_TEST_MODE,
+            "server_time_kst": mock.now_kst().isoformat()}
+
+
+@app.get("/api/admin/settings")
+def admin_settings_get(admin: Tenant = Depends(get_admin)) -> dict:
+    """관리자 입력 런타임 설정(키는 마스킹)."""
+    return {
+        "kw_user_id": appsettings.get("KW_IOT_USER_ID") or settings.KW_IOT_USER_ID or None,
+        "kw_api_key_masked": _mask(appsettings.get("KW_IOT_API_KEY")),
+        "kw_api_key_set": bool(appsettings.get("KW_IOT_API_KEY")),
+        "env_fallback": bool(settings.KW_IOT_API_KEY),
+    }
+
+
+@app.post("/api/admin/settings")
+async def admin_settings_set(payload: dict = Body(...), admin: Tenant = Depends(get_admin),
+                             db: Session = Depends(get_db)) -> dict:
+    """AIR365 플랫폼 API 키/계정 ID 저장(DB). test=true 면 저장 전 연결 점검."""
+    user_id = (payload.get("kw_user_id") or "").strip()
+    api_key = (payload.get("kw_api_key") or "").strip()
+    if not user_id or not api_key:
+        raise HTTPException(400, "AIR365 계정 ID와 API 키를 모두 입력하세요.")
+    pr = await kw_iot.probe(api_key, user_id)
+    if not pr.get("reachable"):
+        raise HTTPException(400, f"연결 실패: {pr.get('error') or 'API 키/계정 ID 확인'}")
+    if payload.get("test"):
+        return {"ok": True, "reachable": True, "seen": len(pr.get("seen", [])), "saved": False}
+    appsettings.set_value(db, "KW_IOT_USER_ID", user_id)
+    appsettings.set_value(db, "KW_IOT_API_KEY", api_key)
+    return {"ok": True, "reachable": True, "seen": len(pr.get("seen", [])), "saved": True}
 
 
 @app.get("/api/kpi")

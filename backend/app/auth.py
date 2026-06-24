@@ -8,11 +8,19 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import billing
+from .config import settings
 from .deps import get_db, get_tenant
 from .models import Tenant
 from .security import hash_password, new_api_key, verify_password
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+def is_admin_email(email: str | None) -> bool:
+    if not email:
+        return False
+    admins = {e.strip().lower() for e in (settings.ADMIN_EMAILS or "").split(",") if e.strip()}
+    return email.lower() in admins
 
 
 def _out(t: Tenant) -> dict:
@@ -46,7 +54,7 @@ def signup(payload: dict = Body(...), db: Session = Depends(get_db)) -> dict:
     # 실제 결제는 PSP 연동 자리(데모). 가입과 동시에 구독 활성으로 표기.
     now = datetime.now(timezone.utc)
     t = Tenant(email=email, password_hash=hash_password(pw), api_key=new_api_key(),
-               name=name or email.split("@")[0], is_demo=False, is_admin=False,
+               name=name or email.split("@")[0], is_demo=False, is_admin=is_admin_email(email),
                plan=plan["code"], sub_status="active",
                plan_started_at=now, plan_renews_at=now + timedelta(days=plan["cycle_days"]))
     db.add(t)
@@ -62,6 +70,10 @@ def login(payload: dict = Body(...), db: Session = Depends(get_db)) -> dict:
     t = db.scalar(select(Tenant).where(Tenant.email == email))
     if t is None or not verify_password(pw, t.password_hash):
         raise HTTPException(401, "이메일 또는 비밀번호가 올바르지 않습니다.")
+    admin = is_admin_email(email)
+    if t.is_admin != admin:   # ADMIN_EMAILS 변경분 반영
+        t.is_admin = admin
+        db.commit()
     return _out(t)
 
 

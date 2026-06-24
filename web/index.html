@@ -471,6 +471,7 @@
       <div class="navlink active" id="nav-dash"><span class="ico">▦</span>대시보드</div>
       <div class="navlink" id="nav-report"><span class="ico">▤</span>리포트</div>
       <div class="navlink" id="nav-devices"><span class="ico">⚙</span>기기 관리</div>
+      <div class="navlink" id="nav-admin" style="display:none"><span class="ico">🛡</span>관리자</div>
     </div>
     <div class="nav-footer">
       <div class="acct"><div class="avatar" id="acctAvatar">HG</div><div class="who" id="acctWho">HeatGuard<small>실시간 데모</small></div></div>
@@ -578,6 +579,7 @@ async function enterApp(){
   state.sn="";
   document.getElementById("nav-onboard").style.display=demo?"none":"flex";
   document.getElementById("mnav-onboard").style.display=demo?"none":"flex";
+  document.getElementById("nav-admin").style.display=state.auth?.is_admin?"flex":"none";
   document.body.classList.add("authed");
   // 신규(기기 미등록) 계정은 온보딩 워크플로우로 자동 안내
   if(!demo && state.devices.length===0) state.view="onboarding";
@@ -600,8 +602,9 @@ document.getElementById("nav-onboard").onclick=()=>{ state.view="onboarding"; se
 document.getElementById("nav-dash").onclick=()=>{ state.view="dash"; setNav(); render(); };
 document.getElementById("nav-report").onclick=()=>{ state.view="report"; setNav(); render(); };
 document.getElementById("nav-devices").onclick=()=>{ state.view="devices"; setNav(); render(); };
+document.getElementById("nav-admin").onclick=()=>{ state.view="admin"; setNav(); render(); };
 function setNav(){
-  for(const v of ["onboard","dash","report","devices"]){ const el=document.getElementById("nav-"+v); if(el) el.classList.toggle("active",state.view===(v==="onboard"?"onboarding":v)); }
+  for(const v of ["onboard","dash","report","devices","admin"]){ const el=document.getElementById("nav-"+v); if(el) el.classList.toggle("active",state.view===(v==="onboard"?"onboarding":v)); }
   document.querySelectorAll("#mBottomNav button").forEach(b=>b.classList.toggle("active",b.dataset.mnav===state.view));
 }
 document.querySelectorAll("#mBottomNav button").forEach(b=>b.onclick=()=>{ state.view=b.dataset.mnav; setNav(); render(); window.scrollTo(0,0); });
@@ -613,7 +616,7 @@ function renderLegend(){
 }
 
 /* ── 라우터 ── */
-function render(){ if(state.view==="report") renderReport(); else if(state.view==="devices") renderDevices(); else if(state.view==="onboarding") renderOnboarding(); else renderDash(); }
+function render(){ if(state.view==="report") renderReport(); else if(state.view==="devices") renderDevices(); else if(state.view==="onboarding") renderOnboarding(); else if(state.view==="admin") renderAdmin(); else renderDash(); }
 
 /* ── 대시보드 ── */
 function renderDash(){
@@ -1296,6 +1299,64 @@ async function wizDoImport(){
   const r=await fetch("/api/air365/import",{method:"POST",headers:authHeaders({"Content-Type":"application/json"}),body:JSON.stringify({serials,site_id:Number(site_id)})});
   if(!r.ok){ alert("가져오기 실패"); return; }
   renderOnboarding();
+}
+
+/* ── 관리자 페이지 ── */
+async function renderAdmin(){
+  document.querySelector(".main").classList.remove("dashView");
+  view.innerHTML=`
+    <div class="paper ctxBar"><div><h1>관리자</h1><div class="csub">운영 현황 · 시스템 상태 · 플랫폼 API 키 설정</div></div>
+      <span class="badge">관리자 전용</span></div>
+    <div class="mgmtSummary" id="admSum"></div>
+    <div class="paper panel">
+      <div class="sectionTitle">🔑 플랫폼 AIR365 API 키 <span class="sectionSub">관리자가 입력하면 모든 계정의 폴백 키로 사용(재배포 불필요)</span></div>
+      <div id="admKeyStatus" class="infoTip" style="margin-top:8px"></div>
+      <div class="addForm" style="margin-top:10px">
+        <div class="field"><label>AIR365 계정 ID</label><input id="admUser" placeholder="company@kweather.co.kr"/></div>
+        <div class="field"><label>API 키</label><input id="admKey" type="password" placeholder="발급받은 서비스 키"/></div>
+        <button class="btn" id="admTest">연결 테스트</button>
+        <button class="btn primary" id="admSave">저장</button>
+      </div>
+      <div class="wizMsg" id="admMsg"></div>
+      <div class="infoTip" style="margin-top:8px">⚠️ API 키는 DB에 암호화(Fernet) 저장됩니다. 비밀번호가 아닌 API 키로 연동합니다.</div>
+    </div>
+    <div class="paper panel"><div class="sectionTitle">시스템 상태</div><div id="admSys" class="infoTip" style="margin-top:8px">불러오는 중…</div></div>
+    <div class="paper panel"><div class="sectionTitle">최근 가입 계정</div>
+      <div class="tblScroll"><table class="devTable"><thead><tr><th>이메일</th><th>이름</th><th class="center">요금제</th><th>가입일</th></tr></thead><tbody id="admRecent"></tbody></table></div></div>`;
+  document.getElementById("admTest").onclick=()=>saveAdminKey(true);
+  document.getElementById("admSave").onclick=()=>saveAdminKey(false);
+  loadAdmin();
+}
+async function loadAdmin(){
+  const [ov,sys,set]=await Promise.all([
+    api("/api/admin/overview").catch(()=>({})), api("/api/admin/system").catch(()=>({})),
+    api("/api/admin/settings").catch(()=>({}))]);
+  document.getElementById("admSum").innerHTML=[
+    ["가입 계정",ov.accounts||0],["사업장",ov.sites||0],["실기기",ov.devices||0],
+    ["누적 기록",ov.logs_total||0],["오늘 기록",ov.logs_today||0],["", ""]
+  ].filter(x=>x[0]).map(([l,n])=>`<div class="sumCard"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
+  const ks=document.getElementById("admKeyStatus");
+  if(ks) ks.innerHTML = set.kw_api_key_set
+    ? `현재: <span class="stBadge on">설정됨</span> 계정 <b>${set.kw_user_id||""}</b> · 키 ${set.kw_api_key_masked||""}`
+    : (set.env_fallback ? `현재: <span class="stBadge stale">env 폴백 사용 중</span> (DB 미설정)` : `현재: <span class="stBadge off">미설정</span>`);
+  if(set.kw_user_id) document.getElementById("admUser").value=set.kw_user_id;
+  document.getElementById("admSys").innerHTML=
+    `DB ${sys.db?"연결됨":"미연결"} · 버전 ${sys.version||"-"} · 수집워커 ${sys.ingest_worker?`ON(${sys.ingest_interval_sec}s)`:"OFF"} · `+
+    `데모모드 ${sys.mock_mode?"ON":"OFF"} · 결제 ${sys.pg_test_mode?"테스트":"실"} · 서버시각 ${sys.server_time_kst?new Date(sys.server_time_kst).toLocaleString("ko-KR"):"-"}`;
+  document.getElementById("admRecent").innerHTML=(ov.recent_accounts||[]).map(a=>
+    `<tr><td>${a.email||"-"}</td><td>${a.name||"-"}</td><td class="center">${a.plan||"-"}</td><td>${a.created_at?new Date(a.created_at).toLocaleString("ko-KR"):"-"}</td></tr>`).join("")
+    ||`<tr><td colspan="4" class="center"><div class="empty">가입 계정이 없습니다.</div></td></tr>`;
+}
+async function saveAdminKey(test){
+  const kw_user_id=document.getElementById("admUser").value.trim(), kw_api_key=document.getElementById("admKey").value.trim();
+  const msg=document.getElementById("admMsg");
+  if(!kw_user_id||!kw_api_key){ msg.style.color="var(--danger)"; msg.textContent="계정 ID와 API 키를 입력하세요."; return; }
+  msg.style.color="var(--muted)"; msg.textContent="확인 중…";
+  const r=await fetch("/api/admin/settings",{method:"POST",headers:authHeaders({"Content-Type":"application/json"}),body:JSON.stringify({kw_user_id,kw_api_key,test})});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok){ msg.style.color="var(--danger)"; msg.textContent=j.detail||"실패"; return; }
+  msg.style.color="#166534"; msg.textContent=test?`✅ 연결 성공 · 조회 가능 기기 ${j.seen}대 (저장하려면 '저장')`:`✅ 저장됨 · 조회 가능 기기 ${j.seen}대`;
+  if(!test){ document.getElementById("admKey").value=""; loadAdmin(); }
 }
 
 /* ── 실시간 연결(WS→폴링) ── */

@@ -39,6 +39,16 @@ class Tenant(Base):
     sites: Mapped[list["Site"]] = relationship(back_populates="tenant")
 
 
+class AppSetting(Base):
+    """런타임 설정(서버 DB) — 관리자 페이지에서 입력하는 API 키 등. STS appsettings 대응."""
+    __tablename__ = "app_settings"
+    __table_args__ = SCHEMA
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    value: Mapped[str | None] = mapped_column(String)   # 비밀값은 암호화 저장('enc:')
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 class SensorLog(Base):
     """실 IoT 측정 기록 — 케이웨더 API에서 읽어온 값을 적재(실시간 기록·시계열 표출)."""
     __tablename__ = "sensor_logs"
